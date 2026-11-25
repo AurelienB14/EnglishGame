@@ -6,8 +6,8 @@ import '@fontsource/barlow-condensed/700.css'
 import '@fontsource/barlow/400.css'
 import '@fontsource/barlow/600.css'
 
-import logomenu from './assets/logoMenu.png'
-import goal_img from './assets/goal.svg'
+import logoMenu from './assets/logoMenu.png'
+import goalImg from './assets/goal.svg'
 
 import Menu from './pages/menu'
 import Camera from './pages/camera'
@@ -27,79 +27,81 @@ const shuffle = (array) => {
 }
 
 function App() {
-  const [isFullScreen, setIsFullScreen] = useState(!!document.fullscreenElement)
+  // 'menu' (pas encore commencé) | 'putgoal' | 'choosingplayers' | 'game'
   const [step, setStep] = useState('menu')
-  const [goal, setGoal] = useState({ x: 100, y: 200, w: 250 })
+  const [menuOpen, setMenuOpen] = useState(true)
+  // Le goal est en fractions de l'écran (0 à 1), pas en pixels : il suit les changements de taille
+  const [goal, setGoal] = useState({ x: 0.2, y: 0.3, w: 0.6 })
   const [allPlayers, setAllPlayers] = useState([])
   const [turn, setTurn] = useState(0)
   const [score, setScore] = useState({ blue: 0, green: 0 })
 
+  // Quitter le plein écran fait revenir le menu (avec CONTINUE)
   useEffect(() => {
-    const maj = () => setIsFullScreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', maj)
-    return () => document.removeEventListener('fullscreenchange', maj)
+    const onChange = () => {
+      if (!document.fullscreenElement) setMenuOpen(true)
+    }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const pleinecran = () => {
-    document.documentElement.requestFullscreen?.()
-    setIsFullScreen(true)
-    if (step === 'menu') setStep('putgoal')
+  const enterFullscreen = () => {
+    // Sur iPhone requestFullscreen n'existe pas : le "?." évite le plantage et on continue quand même
+    document.documentElement.requestFullscreen?.()?.catch(() => {})
+    setMenuOpen(false)
+    setStep((s) => (s === 'menu' ? 'putgoal' : s))
   }
 
-  const setgoalfunc = () => {
-    setStep('choosingplayers')
-  }
+  const goToPlayers = () => setStep('choosingplayers')
 
   const newPlayers = (name, number, team) => {
-    setAllPlayers([...allPlayers, { name, number, team }])
+    setAllPlayers((prev) => [...prev, { name, number, team }])
   }
 
   const deletePlayers = (i) => {
-    setAllPlayers(allPlayers.filter((_, index) => index !== i))
+    setAllPlayers((prev) => prev.filter((_, index) => index !== i))
   }
 
   const drawTeams = () => {
-    const updated = allPlayers.map((p) => ({ ...p }))
+    setAllPlayers((prev) => {
+      const updated = prev.map((p) => ({ ...p }))
 
-    const count = {
-      blue: updated.filter((p) => p.team === 'blue').length,
-      green: updated.filter((p) => p.team === 'green').length,
-    }
+      const count = {
+        blue: updated.filter((p) => p.team === 'blue').length,
+        green: updated.filter((p) => p.team === 'green').length,
+      }
 
-    const randoms = shuffle(updated.filter((p) => p.team === 'random'))
+      const randoms = shuffle(updated.filter((p) => p.team === 'random'))
 
-    randoms.forEach((p) => {
-      let team
-      if (count.blue < count.green) team = 'blue'
-      else if (count.green < count.blue) team = 'green'
-      else team = Math.random() < 0.5 ? 'blue' : 'green'
+      randoms.forEach((p) => {
+        let team
+        if (count.blue < count.green) team = 'blue'
+        else if (count.green < count.blue) team = 'green'
+        else team = Math.random() < 0.5 ? 'blue' : 'green'
 
-      p.team = team
-      count[team]++
+        p.team = team
+        count[team]++
+      })
+
+      return updated
     })
-
-    setAllPlayers(updated)
   }
 
-  const kickOff = () => {
-    setStep('game')
+  const kickOff = () => setStep('game')
+
+  const nextTurn = () => setTurn((t) => t + 1)
+
+  const addGoal = (team, amount = 1) => {
+    setScore((s) => ({ ...s, [team]: s[team] + amount }))
   }
 
-  const addGoal = (team) => {
-    setScore((s) => ({ ...s, [team]: s[team] + 1 }))
+  const removeGoal = (team) => {
+    setScore((s) => ({ ...s, [team]: Math.max(0, s[team] - 1) }))
   }
 
-  const nextTurn = () => {
-    setTurn((t) => t + 1)
-  }
-
-  let page
-  if (!isFullScreen && step === 'menu') {
-    page = <Menu text="PLAY" buttonMenu={pleinecran} logoImg={logomenu} />
-  } else if (!isFullScreen) {
-    page = <Menu text="CONTINUE" buttonMenu={pleinecran} logoImg={logomenu} />
-  } else if (step === 'putgoal') {
-    page = <PutGoal goal={goal} setGoal={setGoal} add={setgoalfunc} goalimg={goal_img} />
+  let page = null
+  if (step === 'putgoal') {
+    page = <PutGoal goal={goal} setGoal={setGoal} onConfirm={goToPlayers} goalimg={goalImg} />
   } else if (step === 'choosingplayers') {
     page = (
       <ChoosingPlayers
@@ -116,10 +118,11 @@ function App() {
         allPlayers={allPlayers}
         turn={turn}
         goal={goal}
-        goalimg={goal_img}
+        goalimg={goalImg}
         score={score}
         addGoal={addGoal}
         nextTurn={nextTurn}
+        removeGoal={removeGoal}
       />
     )
   }
@@ -128,6 +131,14 @@ function App() {
     <>
       <Camera />
       {page}
+      {/* Le menu passe par-dessus : la page reste montée, la partie en cours n'est pas perdue */}
+      {menuOpen && (
+        <Menu
+          text={step === 'menu' ? 'PLAY' : 'CONTINUE'}
+          onPress={enterFullscreen}
+          logoImg={logoMenu}
+        />
+      )}
     </>
   )
 }

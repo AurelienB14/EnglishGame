@@ -6,15 +6,30 @@ html, body, #root {
   overscroll-behavior: none;
 }
 
-@theme {
+/* Fond de secours (si la caméra est refusée) */
+body {
+  background-color: var(--color-paper);
+}
+
+/* "static" : toutes les variables sont toujours générées, même celles
+   utilisées seulement en JS (ex. var(--color-easy) dans constants.js) */
+@theme static {
   --font-display: "Bebas Neue", sans-serif;
   --font-condensed: "Barlow Condensed", sans-serif;
   --font-sans: "Barlow", sans-serif;
 
   --color-navy: #061A40;
   --color-royal: #0B3B8F;
+  --color-white: #FFFFFF;
+  --color-paper: #F5F2EA; /* blanc cassé : fond de secours sans caméra */
   --color-gold: #DBA111;
   --color-team-green: #35ab52;
+
+  /* Niveaux des cartes */
+  --color-easy: #2FB463;
+  --color-medium: #F28C1E;
+  --color-hard: #D7263D;
+  --color-extreme: #121417;
 
   --tracking-brand: 0.08em;
 }

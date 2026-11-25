@@ -1,27 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import Player from '../component/player'
 import Ball from '../component/ball'
-import { TEAM_COLOR } from '../component/teams'
+import Star from '../component/star'
+import Button from '../component/button'
+import BonusMenu from '../component/bonus_menu'
+import { CHANCES, KEEPER_ZONE, LEVELS, MISS_BALL, ZONES } from '../constants'
+import { goalToPx, useViewport } from '../viewport'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
 const ROLL_TIME = 1500 // durée du tirage, en ms
+const MIDDLE_Y = 0.38 // hauteur de la zone centrale (ballon, niveau, résultat), en fraction de l'écran
 
-const LEVELS = [
-  { id: 'easy', label: 'Easy', article: 'an', color: '#2FB463', stars: 1 },
-  { id: 'medium', label: 'Medium', article: 'a', color: '#F28C1E', stars: 2 },
-  { id: 'hard', label: 'Hard', article: 'a', color: '#D7263D', stars: 3 },
-  { id: 'extreme', label: 'Extreme', article: 'an', color: '#121417', stars: 4 },
-]
-
-// [chance de cadrer, chance d'arrêt si le gardien a bon]
-const CHANCES = {
-  easy: [0.3, 0.1],
-  medium: [0.6, 0.2],
-  hard: [0.9, 0.3],
-}
-
-// Position du gardien dans les cages : 0 = poteau gauche, 1 = poteau droit
-const KEEPER_ZONE = { left: 0, middle: 0.5, right: 1 }
+const ZONE_LABEL = { left: 'Left', center: 'Center', right: 'Right' }
 
 const OUTCOME = {
   goal: { text: 'Goal', bang: true },
@@ -33,48 +23,35 @@ const OUTCOME = {
 
 const pick = (array) => array[Math.floor(Math.random() * array.length)]
 
-function resolveShot(levelId, shooterOk, keeperOk) {
-  if (!shooterOk) return { result: keeperOk ? 'bonus' : 'nothing' }
-
+// Calcule le résultat d'un tir (l'attaquant a répondu Correct) vers la zone choisie.
+// Les probabilités viennent de CHANCES. Le choix de la zone ne change que la direction.
+function resolveShot(levelId, keeperOk, power, zone) {
   const [onTarget, saveChance] = CHANCES[levelId]
   const save = keeperOk ? saveChance : 0
+  const goalChance = Math.min(1, onTarget - save + (power ? 0.2 : 0))
   const r = Math.random()
-  const zones = ['left', 'middle', 'right']
 
-  if (r < onTarget - save) {
-    const ball = pick(zones)
-    return { result: 'goal', ball, keeper: pick(zones.filter((z) => z !== ball)) }
+  // But : le gardien plonge dans une autre zone
+  if (r < goalChance) {
+    return { result: 'goal', ball: zone, keeper: pick(ZONES.filter((z) => z !== zone)) }
   }
-  if (r < onTarget) {
-    const ball = pick(zones)
-    return { result: 'save', ball, keeper: ball }
+  // Arrêt : le gardien plonge dans la même zone
+  if (r < goalChance + save) {
+    return { result: 'save', ball: zone, keeper: zone }
   }
-  return { result: 'miss', ball: pick(['wideLeft', 'over', 'wideRight']), keeper: pick(zones) }
-}
-
-function Star() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-7 w-7">
-      <path
-        d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"
-        fill="#FFFFFF"
-        stroke="#061A40"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
+  // Raté : le ballon sort du côté choisi, le gardien plonge au hasard
+  return { result: 'miss', ball: MISS_BALL[zone], keeper: pick(ZONES) }
 }
 
 function LevelBadge({ level }) {
   return (
     <>
-      <div className="h-24 w-24 transition-transform duration-500 starting:scale-0">
+      <div className="h-20 w-20 transition-transform duration-500 starting:scale-0 [@media(min-height:700px)]:h-24 [@media(min-height:700px)]:w-24">
         <Ball color={level.color} />
       </div>
       <div className="mt-2 flex gap-1">
         {Array.from({ length: level.stars }, (_, i) => (
-          <Star key={i} />
+          <Star key={i} className="h-7 w-7 fill-white stroke-navy" />
         ))}
       </div>
       <p className="font-display text-4xl uppercase tracking-wide text-white [text-shadow:3px_3px_0_var(--color-navy)]">
@@ -94,17 +71,13 @@ function CardPanel({ role, player, level, onAnswer }) {
         Draw {level.article} {level.label} card
       </p>
       <div className="mt-3 flex gap-3">
-        <button
-          type="button"
-          onClick={() => onAnswer(true)}
-          className="h-12 flex-1 rounded-full bg-white font-condensed text-lg font-bold uppercase tracking-brand text-navy"
-        >
+        <Button onClick={() => onAnswer(true)} className="flex-1">
           ✓ Correct
-        </button>
+        </Button>
         <button
           type="button"
           onClick={() => onAnswer(false)}
-          className="h-12 flex-1 rounded-full border-2 border-white bg-navy font-condensed text-lg font-bold uppercase tracking-brand text-white"
+          className="h-14 flex-1 rounded-full border-2 border-white bg-navy font-condensed text-xl font-bold uppercase tracking-brand text-white"
         >
           ✕ Incorrect
         </button>
@@ -113,7 +86,28 @@ function CardPanel({ role, player, level, onAnswer }) {
   )
 }
 
-function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
+// Panneau "Pick your spot" : l'attaquant choisit la zone du tir
+function AimPanel({ onPick }) {
+  return (
+    <div className="w-full rounded-2xl bg-navy/80 p-4">
+      <p className="text-center font-display text-3xl uppercase tracking-wide text-white">
+        Pick your spot
+      </p>
+      <div className="mt-3 flex gap-2">
+        {ZONES.map((z) => (
+          <Button key={z} onClick={() => onPick(z)} className="flex-1">
+            {ZONE_LABEL[z]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nextTurn }) {
+  const viewport = useViewport()
+  const g = goalToPx(goal, viewport) // le goal en pixels pour la taille actuelle de l'écran
+
   // Qui joue
   const attacking = turn % 2 === 0 ? 'blue' : 'green'
   const defending = attacking === 'blue' ? 'green' : 'blue'
@@ -126,10 +120,11 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
   const keeper = defenders[round % defenders.length]
 
   // État du tour
-  // 'ready' | 'rolling' | 'shooterCard' | 'keeperCard' | 'shot' | 'outcome'
+  // 'ready' | 'rolling' | 'shooterCard' | 'keeperCard' | 'aim' | 'shot' | 'outcome'
   const [phase, setPhase] = useState('ready')
   const [levelIndex, setLevelIndex] = useState(null)
   const [shooterOk, setShooterOk] = useState(null)
+  const [keeperOk, setKeeperOk] = useState(null)
   const [shot, setShot] = useState(null)
   const [ball, setBall] = useState(null) // position du ballon pendant le tir
 
@@ -138,14 +133,26 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
 
   // Taille du gardien
   const [ratio, setRatio] = useState(null)
-  const goalH = ratio ? goal.w * ratio : 0
+  const goalH = ratio ? g.w * ratio : 0
   const keeperH = goalH * 0.9
   const keeperW = keeperH * (100 / 140)
-  const range = goal.w - keeperW
+  const range = g.w - keeperW
 
   // Gardien : va-et-vient tant que patrol vaut true
   const keeperRef = useRef(null)
   const patrol = useRef(true)
+
+  const [bonus, setBonus] = useState({ double: false, power: false })
+
+  // Timers du tir : on les garde pour pouvoir les annuler si le composant disparaît
+  const timers = useRef([])
+  const later = (fn, ms) => {
+    timers.current.push(setTimeout(fn, ms))
+  }
+  useEffect(() => {
+    const list = timers.current
+    return () => list.forEach(clearTimeout)
+  }, [])
 
   useEffect(() => {
     let frame
@@ -181,14 +188,14 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
 
   // Où va le ballon (coordonnées écran)
   const ballTarget = (zone) => {
-    const y = goal.y + goalH * 0.55
+    const y = g.y + goalH * 0.55
     const targets = {
-      left: { x: goal.x + goal.w * 0.18, y },
-      middle: { x: goal.x + goal.w * 0.5, y },
-      right: { x: goal.x + goal.w * 0.82, y },
-      wideLeft: { x: goal.x - 24, y },
-      over: { x: goal.x + goal.w * 0.5, y: goal.y - 24 },
-      wideRight: { x: goal.x + goal.w + 24, y },
+      left: { x: g.x + g.w * 0.18, y },
+      center: { x: g.x + g.w * 0.5, y },
+      right: { x: g.x + g.w * 0.82, y },
+      wideLeft: { x: g.x - 24, y },
+      over: { x: g.x + g.w * 0.5, y: g.y - 24 },
+      wideRight: { x: g.x + g.w + 24, y },
     }
     return targets[zone]
   }
@@ -198,18 +205,18 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
 
     // 1. Le gardien arrête son va-et-vient et revient au milieu
     patrol.current = false
-    moveKeeper(KEEPER_ZONE.middle, 400)
-    setBall({ x: window.innerWidth / 2, y: window.innerHeight * 0.38, scale: 1 })
+    moveKeeper(KEEPER_ZONE.center, 400)
+    setBall({ x: viewport.width / 2, y: viewport.height * MIDDLE_Y, scale: 1 })
 
     // 2. Le ballon part, le gardien plonge
-    setTimeout(() => {
+    later(() => {
       setBall({ ...ballTarget(res.ball), scale: 0.5 })
       moveKeeper(KEEPER_ZONE[res.keeper], 300)
     }, 500)
 
     // 3. Résultat
-    setTimeout(() => {
-      if (res.result === 'goal') addGoal(attacking)
+    later(() => {
+      if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
       setPhase('outcome')
     }, 1300)
   }
@@ -224,22 +231,42 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
   }
 
   const keeperAnswer = (ok) => {
-    const res = resolveShot(shooterLevel.id, shooterOk, ok)
+    setKeeperOk(ok)
+    if (shooterOk) {
+      // L'attaquant a bon : il choisit où tirer
+      setPhase('aim')
+    } else {
+      // Pas de tir : "Keeper bonus" si le gardien a bon, sinon "No shot"
+      setShot({ result: ok ? 'bonus' : 'nothing' })
+      setPhase('outcome')
+    }
+  }
+
+  // Le résultat est calculé ici, au moment où l'attaquant choisit sa zone
+  const chooseSpot = (zone) => {
+    const res = resolveShot(shooterLevel.id, keeperOk, bonus.power, zone)
     setShot(res)
-    if (shooterOk) playShot(res)
-    else setPhase('outcome')
+    playShot(res)
   }
 
   const next = () => {
     if (keeperRef.current) keeperRef.current.style.transition = 'none'
     patrol.current = true
+    setBonus({ double: false, power: false })
     setPhase('ready')
     setLevelIndex(null)
     setShooterOk(null)
+    setKeeperOk(null)
     setShot(null)
     setBall(null)
     nextTurn()
   }
+
+  const toggleBonus = (id) => {
+    setBonus((b) => ({ ...b, [id]: !b[id] }))
+  }
+
+  const canUseShotBonus = ['ready', 'rolling', 'shooterCard', 'keeperCard', 'aim'].includes(phase)
 
   return (
     <div className="relative h-dvh overflow-hidden">
@@ -255,12 +282,12 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
       </div>
 
       {/* Cages + gardien */}
-      <div className="absolute" style={{ left: goal.x, top: goal.y, width: goal.w }}>
+      <div className="absolute" style={{ left: g.x, top: g.y, width: g.w }}>
         <img
           src={goalimg}
           alt=""
           draggable={false}
-          className="w-full select-none"
+          className="invisible w-full select-none"
           onLoad={(e) => setRatio(e.target.naturalHeight / e.target.naturalWidth)}
         />
 
@@ -272,13 +299,33 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
             </p>
           </div>
         )}
+
+        {/* Trois zones cliquables par-dessus le goal (phase aim) */}
+        {ratio && phase === 'aim' && (
+          <div className="absolute inset-0 flex">
+            {ZONES.map((z) => (
+              <button
+                key={z}
+                type="button"
+                onClick={() => chooseSpot(z)}
+                aria-label={ZONE_LABEL[z]}
+                className="h-full flex-1 border-2 border-dashed border-gold bg-gold/15 active:bg-gold/40"
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Milieu */}
-      <div className="absolute left-1/2 top-[38%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+      {/* Placé à 38 % de la hauteur (et non 50 %) pour ne pas chevaucher le tireur sur petit écran */}
+      <div
+        className="absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+        style={{ top: `${MIDDLE_Y * 100}%` }}
+      >
         {phase === 'ready' && (
           <div className="h-14 w-14">
-            <Ball color={TEAM_COLOR[shooter.team]} />
+            {/* Ballon blanc, rond central noir pour faire ressortir le logo blanc */}
+            <Ball color="var(--color-white)" core="var(--color-extreme)" />
           </div>
         )}
 
@@ -304,7 +351,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
 
         {phase === 'outcome' && (
           <p className="whitespace-nowrap font-display text-6xl uppercase tracking-wide text-white [text-shadow:4px_4px_0_var(--color-navy)]">
-            {OUTCOME[shot.result].text}
+            {shot.result === 'goal' && bonus.double ? 'Double goal' : OUTCOME[shot.result].text}
             {OUTCOME[shot.result].bang && <span className="text-gold">!</span>}
           </p>
         )}
@@ -322,20 +369,15 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
 
       {/* Bas : attaquant + zone d'action */}
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 p-4">
-        <div className="aspect-[100/140] h-36">
+        <div className="aspect-[100/140] h-28 [@media(min-height:700px)]:h-36">
           <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
         </div>
 
         <div className="flex h-[148px] w-full items-end">
           {(phase === 'ready' || phase === 'rolling') && (
-            <button
-              type="button"
-              onClick={shoot}
-              disabled={phase === 'rolling'}
-              className="h-14 w-full rounded-full bg-gold font-condensed text-xl font-bold uppercase tracking-brand text-navy disabled:opacity-40"
-            >
+            <Button onClick={shoot} disabled={phase === 'rolling'} className="w-full">
               Shoot
-            </button>
+            </Button>
           )}
 
           {phase === 'shooterCard' && (
@@ -346,17 +388,23 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, nextTurn }) {
             <CardPanel role="Keeper" player={keeper} level={keeperLevel} onAnswer={keeperAnswer} />
           )}
 
+          {phase === 'aim' && <AimPanel onPick={chooseSpot} />}
+
           {phase === 'outcome' && (
-            <button
-              type="button"
-              onClick={next}
-              className="h-14 w-full rounded-full bg-gold font-condensed text-xl font-bold uppercase tracking-brand text-navy"
-            >
+            <Button onClick={next} className="w-full">
               Next shot
-            </button>
+            </Button>
           )}
         </div>
       </div>
+
+      <BonusMenu
+        active={bonus}
+        onToggle={toggleBonus}
+        canUseShotBonus={canUseShotBonus}
+        score={score}
+        onVar={removeGoal}
+      />
     </div>
   )
 }

@@ -1,64 +1,74 @@
 import { useRef } from 'react'
+import Button from '../component/button'
+import { clamp, goalToPx, useViewport } from '../viewport'
 
-function PutGoal({ goal, setGoal, add, goalimg }) {    
-    const debut = useRef(null)
-    const debutTaille = useRef(null)
+const MIN_WIDTH = 80 // largeur minimale du goal, en px
 
-    const debutDeplacement = (e) => {
+function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
+  const viewport = useViewport()
+  const pos = goalToPx(goal, viewport)
+
+  const imgRef = useRef(null)
+  const drag = useRef(null) // geste en cours : { mode: 'move' | 'resize', point de départ, goal de départ }
+
+  const startDrag = (e, mode) => {
+    // Le doigt reste "attaché" à l'élément même s'il en sort
     e.currentTarget.setPointerCapture(e.pointerId)
-    debut.current = { px: e.clientX, py: e.clientY, x: goal.x, y: goal.y }
-    }
-
-    const debutSize = (e) => {
+    // Sans ça, toucher la poignée déclencherait aussi le déplacement du goal
     e.stopPropagation()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    debutTaille.current = { px: e.clientX, w: goal.w}
-    }
+    drag.current = { mode, px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, w: pos.w }
+  }
 
-    const deplacement = (e) => {
-    if (!debut.current) return
-    setGoal({
-        ...goal,
-        x: debut.current.x + (e.clientX - debut.current.px),
-        y: debut.current.y + (e.clientY - debut.current.py),
-    })
-    }
+  const onMove = (e) => {
+    const d = drag.current
+    if (!d) return
+    const dx = e.clientX - d.px
+    const dy = e.clientY - d.py
+    // Proportions de l'image (hauteur / largeur), pour garder le goal dans l'écran
+    const ratio = imgRef.current.offsetHeight / imgRef.current.offsetWidth || 0.5
 
-    const size = (e) => {
-    if (!debutTaille.current) return
-    setGoal({
-        ...goal,
-        w: Math.max(80, debutTaille.current.w + (e.clientX - debutTaille.current.px)),
-    })
+    if (d.mode === 'move') {
+      const x = clamp(d.x + dx, 0, Math.max(0, viewport.width - d.w))
+      const y = clamp(d.y + dy, 0, Math.max(0, viewport.height - d.w * ratio))
+      setGoal((prev) => ({ ...prev, x: x / viewport.width, y: y / viewport.height }))
+    } else {
+      const maxW = Math.min(viewport.width - d.x, (viewport.height - d.y) / ratio)
+      const w = clamp(d.w + dx, MIN_WIDTH, Math.max(MIN_WIDTH, maxW))
+      setGoal((prev) => ({ ...prev, w: w / viewport.width }))
     }
+  }
 
-    const finDeplacement = () => { debut.current = null }
-    const finSize = () => { debutTaille.current = null }
-    return (
-        <>
-        <div className="flex w-full h-full justify-center items-center">
-            <div
-                className="absolute touch-none"
-                style={{ left: goal.x, top: goal.y, width: goal.w}}
-                onPointerDown={debutDeplacement}
-                onPointerMove={deplacement}
-                onPointerUp={finDeplacement}
-                >
-                <img src={goalimg} alt="" draggable={false} className="w-full select-none touch-none" />
-                <div className='absolute right-[-10px] bottom-[-10px] h-[20px] w-[20px] bg-[#FF0000] rounded-full'
-                onPointerDown={debutSize}
-                onPointerMove={size}
-                onPointerUp={finSize}/>
-            </div>
-            <button onClick={add} className="absolute
-            w-[200px] h-[50px] bottom-[50px] 
-            bg-[#0B3B8F] text-[#FFFFFF]
-            border-[2px] border-[#061A40] rounded-[50px]
-            font-display uppercase tracking-wider text-[20px]
-            ">Set Goal</button>
-        </div>
-        </>
-    )
+  const endDrag = () => {
+    drag.current = null
+  }
+
+  return (
+    <div className="relative h-dvh">
+      <p className="absolute left-1/2 top-4 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy/80 px-4 py-1 font-condensed text-sm font-semibold uppercase tracking-brand text-white">
+        Cover the real goal
+      </p>
+
+      <div
+        className="absolute touch-none"
+        style={{ left: pos.x, top: pos.y, width: pos.w }}
+        onPointerDown={(e) => startDrag(e, 'move')}
+        onPointerMove={onMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
+        <img ref={imgRef} src={goalimg} alt="" draggable={false} className="w-full select-none" />
+        {/* Poignée de 40 px (taille minimale pour un doigt) */}
+        <div
+          className="absolute bottom-0 right-0 h-10 w-10 touch-none rounded-full border-2 border-navy bg-gold"
+          onPointerDown={(e) => startDrag(e, 'resize')}
+        />
+      </div>
+
+      <Button onClick={onConfirm} className="absolute bottom-12 left-1/2 w-52 -translate-x-1/2">
+        Set Goal
+      </Button>
+    </div>
+  )
 }
 
 export default PutGoal

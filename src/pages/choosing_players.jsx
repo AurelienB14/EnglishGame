@@ -1,4 +1,5 @@
 import ChoosingPlayersTeamCard from '../component/choosing_players_team_card'
+import Button from '../component/button'
 
 const MAX_PLAYERS = 6
 const MAX_TEAM = 3
@@ -111,13 +112,9 @@ function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kic
                 <section className="flex h-full flex-col rounded-2xl bg-white p-2 text-navy">
                 <div className="mb-1.5 flex items-center justify-between px-1">
                     <h3 className="font-display text-xl uppercase tracking-wide">Random</h3>
-                    <button
-                        type="button"
-                        onClick={drawTeams}
-                        className="h-8 rounded-full bg-navy px-4 font-condensed text-sm font-bold uppercase tracking-brand text-white"
-                    >
+                    <Button size="sm" onClick={drawTeams}>
                         Draw teams
-                    </button>
+                    </Button>
                     </div>
 
                 <ul className="flex flex-1 flex-wrap content-center justify-center gap-2">
@@ -137,14 +134,9 @@ function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kic
         </div>
 
         <div className="flex shrink-0 gap-3">
-            <button
-            type="button"
-            onClick={kickOff}
-            disabled={!canKickOff}
-            className="h-14 flex-1 rounded-full bg-gold font-condensed text-xl font-bold uppercase tracking-brand text-navy disabled:opacity-40"
-            >
+            <Button onClick={kickOff} disabled={!canKickOff} className="flex-1">
             Kick off
-            </button>
+            </Button>
         </div>
         </div>
     )

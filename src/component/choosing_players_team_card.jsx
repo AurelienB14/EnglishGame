@@ -13,9 +13,12 @@ function ChoosingPlayersTeamCard({ name, number, dot, onDelete }) {
         type="button"
         onClick={onDelete}
         aria-label={`Remove ${name}`}
-        className="absolute -top-1.5 right-4 flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy bg-white text-[10px] text-navy"
+        className="absolute -right-1 -top-3 flex h-10 w-10 items-center justify-center"
       >
-        ✕
+        {/* Zone tactile de 40 px autour d'un petit rond visible de 24 px */}
+        <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy bg-white text-[10px] text-navy">
+          ✕
+        </span>
       </button>
     </li>
   )

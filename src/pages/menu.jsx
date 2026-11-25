@@ -1,17 +1,15 @@
-function Menu({text, buttonMenu, logoImg}) {
-    return (
-        <>
-            <div className="flex w-full h-full justify-center items-center">
-                <img src={logoImg} alt="" className="absolute w-[250px]"/>
-                <button onClick={buttonMenu} className="absolute 
-                w-[200px] h-[50px] bottom-[50px] 
-                bg-[#0B3B8F] text-[#FFFFFF]
-                border-[2px] border-[#061A40] rounded-[50px]
-                font-display uppercase tracking-wider text-[20px]
-                ">{text}</button>
-            </div>
-        </>
-    )
+import Button from '../component/button'
+
+// Affiché par-dessus la page en cours (qui reste montée, donc rien n'est perdu)
+function Menu({ text, onPress, logoImg }) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-navy/70">
+      <img src={logoImg} alt="Green Pitch" className="w-[250px]" />
+      <Button onClick={onPress} className="absolute bottom-12 w-52">
+        {text}
+      </Button>
+    </div>
+  )
 }
 
 export default Menu

@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+@theme {
+  --font-display: "Bebas Neue", sans-serif;
+  --font-condensed: "Barlow Condensed", sans-serif;
+  --font-sans: "Barlow", sans-serif;
+
+  --color-navy: #061A40;
+  --color-royal: #0B3B8F;
+  --color-gold: #DBA111;
+  --color-team-green: #35ab52;
+
+  --tracking-brand: 0.08em;
+}

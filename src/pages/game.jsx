@@ -4,12 +4,13 @@ import Ball from '../component/ball'
 import Star from '../component/star'
 import Button from '../component/button'
 import BonusMenu from '../component/bonus_menu'
-import { CHANCES, KEEPER_ZONE, LEVELS, MISS_BALL, ZONES } from '../constants'
+import { CHANCES, GOALS_TO_WIN, KEEPER_ZONE, LEVELS, MATCH_SECONDS, MISS_BALL, ZONES } from '../constants'
 import { goalToPx, useViewport } from '../viewport'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
 const ROLL_TIME = 1500 // durée du tirage, en ms
-const MIDDLE_Y = 0.38 // hauteur de la zone centrale (ballon, niveau, résultat), en fraction de l'écran
+const MIDDLE_Y = 0.38 // hauteur de la zone centrale (tirage, niveau, résultat), en fraction de l'écran
+const BALL_Y = 0.5 // hauteur du ballon d'attente et départ du tir : le milieu de l'écran
 
 const ZONE_LABEL = { left: 'Left', center: 'Center', right: 'Right' }
 
@@ -20,6 +21,10 @@ const OUTCOME = {
   nothing: { text: 'No shot', bang: false },
   bonus: { text: 'Keeper bonus', bang: false },
 }
+
+// 605 secondes -> "10:05"
+const formatTime = (seconds) =>
+  `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
 const pick = (array) => array[Math.floor(Math.random() * array.length)]
 
@@ -104,7 +109,7 @@ function AimPanel({ onPick }) {
   )
 }
 
-function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nextTurn }) {
+function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nextTurn, paused, onFinish }) {
   const viewport = useViewport()
   const g = goalToPx(goal, viewport) // le goal en pixels pour la taille actuelle de l'écran
 
@@ -143,6 +148,28 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   const patrol = useRef(true)
 
   const [bonus, setBonus] = useState({ double: false, power: false })
+
+  // Chrono du match (en secondes). Il s'arrête à 10:00 et se met en pause quand le menu est ouvert.
+  const [elapsed, setElapsed] = useState(0)
+  const elapsedRef = useRef(0) // copie lisible depuis les timers du tir (sinon ils verraient une valeur périmée)
+  const [lastShot, setLastShot] = useState(false) // vrai si le tir qui vient d'être joué était le dernier
+  const timeUp = elapsed >= MATCH_SECONDS
+
+  useEffect(() => {
+    elapsedRef.current = elapsed
+  }, [elapsed])
+
+  useEffect(() => {
+    if (paused) return
+    const id = setInterval(() => setElapsed((e) => Math.min(e + 1, MATCH_SECONDS)), 1000)
+    return () => clearInterval(id)
+  }, [paused])
+
+  // Affiche le résultat du tir. Si le temps était déjà écoulé, c'était le dernier tir.
+  const showOutcome = () => {
+    setLastShot(elapsedRef.current >= MATCH_SECONDS)
+    setPhase('outcome')
+  }
 
   // Timers du tir : on les garde pour pouvoir les annuler si le composant disparaît
   const timers = useRef([])
@@ -206,7 +233,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     // 1. Le gardien arrête son va-et-vient et revient au milieu
     patrol.current = false
     moveKeeper(KEEPER_ZONE.center, 400)
-    setBall({ x: viewport.width / 2, y: viewport.height * MIDDLE_Y, scale: 1 })
+    setBall({ x: viewport.width / 2, y: viewport.height * BALL_Y, scale: 1 })
 
     // 2. Le ballon part, le gardien plonge
     later(() => {
@@ -217,7 +244,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     // 3. Résultat
     later(() => {
       if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
-      setPhase('outcome')
+      showOutcome()
     }, 1300)
   }
 
@@ -238,7 +265,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     } else {
       // Pas de tir : "Keeper bonus" si le gardien a bon, sinon "No shot"
       setShot({ result: ok ? 'bonus' : 'nothing' })
-      setPhase('outcome')
+      showOutcome()
     }
   }
 
@@ -259,8 +286,14 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     setKeeperOk(null)
     setShot(null)
     setBall(null)
+    setLastShot(false)
     nextTurn()
   }
+
+  // Le match se termine sur le résultat d'un tir : 7 buts, ou dernier tir joué après les 10 minutes.
+  // (Calculé à chaque affichage : un VAR qui retire un but peut donc relancer le match.)
+  const matchOver =
+    phase === 'outcome' && (lastShot || score.blue >= GOALS_TO_WIN || score.green >= GOALS_TO_WIN)
 
   const toggleBonus = (id) => {
     setBonus((b) => ({ ...b, [id]: !b[id] }))
@@ -271,7 +304,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   return (
     <div className="relative h-dvh overflow-hidden">
       {/* Tableau des scores */}
-      <div className="absolute inset-x-0 top-0 flex justify-center p-3">
+      <div className="absolute inset-x-0 top-0 flex flex-col items-center gap-1 p-3">
         <div className="flex overflow-hidden rounded-lg font-display text-2xl uppercase tracking-wide">
           <span className="border-b-4 border-royal bg-navy px-3 py-1 text-white">Blue</span>
           <span className="bg-gold px-4 py-1 text-navy">
@@ -279,6 +312,15 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
           </span>
           <span className="border-b-4 border-team-green bg-navy px-3 py-1 text-white">Green</span>
         </div>
+
+        {/* Chrono : devient "Last shot!" à 10:00, puis "Full time" au coup de sifflet final */}
+        <p
+          className={`rounded-full bg-navy/80 px-3 font-condensed text-sm font-semibold uppercase tracking-brand ${
+            timeUp ? 'text-gold' : 'text-white'
+          }`}
+        >
+          {matchOver ? 'Full time' : timeUp ? 'Last shot!' : formatTime(elapsed)}
+        </p>
       </div>
 
       {/* Cages + gardien */}
@@ -317,18 +359,25 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
       </div>
 
       {/* Milieu */}
+      {/* Ballon d'attente : pile au milieu de l'écran. Blanc, rond central noir pour faire ressortir le logo */}
+      {phase === 'ready' && (
+        <div
+          className="absolute left-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2"
+          style={{ top: `${BALL_Y * 100}%` }}
+        >
+          {/* Ombre plate (pas de flou) sous le ballon */}
+          <div className="absolute inset-x-2 -bottom-1 h-2 rounded-full bg-navy/40" />
+          <div className="relative h-full w-full motion-safe:animate-ball-idle">
+            <Ball color="var(--color-white)" core="var(--color-extreme)" />
+          </div>
+        </div>
+      )}
+
       {/* Placé à 38 % de la hauteur (et non 50 %) pour ne pas chevaucher le tireur sur petit écran */}
       <div
         className="absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
         style={{ top: `${MIDDLE_Y * 100}%` }}
       >
-        {phase === 'ready' && (
-          <div className="h-14 w-14">
-            {/* Ballon blanc, rond central noir pour faire ressortir le logo blanc */}
-            <Ball color="var(--color-white)" core="var(--color-extreme)" />
-          </div>
-        )}
-
         {phase === 'rolling' && (
           <div className="relative h-36 w-36 animate-spin [animation-duration:0.6s]">
             {LEVELS.slice(0, 3).map((l, i) => {
@@ -391,8 +440,8 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
           {phase === 'aim' && <AimPanel onPick={chooseSpot} />}
 
           {phase === 'outcome' && (
-            <Button onClick={next} className="w-full">
-              Next shot
+            <Button onClick={matchOver ? onFinish : next} className="w-full">
+              {matchOver ? 'See result' : 'Next shot'}
             </Button>
           )}
         </div>

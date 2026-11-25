@@ -32,4 +32,11 @@ body {
   --color-extreme: #121417;
 
   --tracking-brand: 0.08em;
+
+  /* Petit rebond du ballon d'attente (transform seulement : léger pour le téléphone) */
+  --animate-ball-idle: ball-idle 1.2s ease-in-out infinite;
+  @keyframes ball-idle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
 }

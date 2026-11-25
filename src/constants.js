@@ -6,6 +6,12 @@ export const TEAM_COLOR = {
   green: 'var(--color-team-green)',
 }
 
+// Fin de match : 7 buts, ou 10 minutes (puis un dernier tir)
+export const GOALS_TO_WIN = 7
+export const MATCH_SECONDS = 30 // TEST : remettre 10 * 60 pour le vrai match
+
+export const TEAM_LABEL = { blue: 'Blue', green: 'Green' }
+
 // Niveaux de difficulté des cartes
 export const LEVELS = [
   { id: 'easy', label: 'Easy', article: 'an', color: 'var(--color-easy)', stars: 1 },

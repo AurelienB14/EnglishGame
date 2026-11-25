@@ -14,6 +14,7 @@ import Camera from './pages/camera'
 import PutGoal from './pages/putgoal'
 import ChoosingPlayers from './pages/choosing_players'
 import Game from './pages/game'
+import Result from './pages/result'
 
 const shuffle = (array) => {
   const a = [...array]
@@ -27,7 +28,7 @@ const shuffle = (array) => {
 }
 
 function App() {
-  // 'menu' (pas encore commencé) | 'putgoal' | 'choosingplayers' | 'game'
+  // 'menu' (pas encore commencé) | 'putgoal' | 'choosingplayers' | 'game' | 'result'
   const [step, setStep] = useState('menu')
   const [menuOpen, setMenuOpen] = useState(true)
   // Le goal est en fractions de l'écran (0 à 1), pas en pixels : il suit les changements de taille
@@ -89,6 +90,15 @@ function App() {
 
   const kickOff = () => setStep('game')
 
+  const finishMatch = () => setStep('result')
+
+  // Nouveau match : mêmes joueurs et même goal, score et tours remis à zéro
+  const restart = () => {
+    setScore({ blue: 0, green: 0 })
+    setTurn(0)
+    setStep('choosingplayers')
+  }
+
   const nextTurn = () => setTurn((t) => t + 1)
 
   const addGoal = (team, amount = 1) => {
@@ -123,8 +133,12 @@ function App() {
         addGoal={addGoal}
         nextTurn={nextTurn}
         removeGoal={removeGoal}
+        paused={menuOpen}
+        onFinish={finishMatch}
       />
     )
+  } else if (step === 'result') {
+    page = <Result allPlayers={allPlayers} score={score} onRestart={restart} />
   }
 
   return (

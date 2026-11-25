@@ -256,7 +256,34 @@ body {
   }
 }
 
-/* Mouvement réduit : on coupe toutes les animations */
+/* Les mouvements du jeu (tirage, vol du ballon, plongeon du gardien) font partie des règles :
+   on les garde toujours. Seuls les mouvements décoratifs sont coupés en "mouvement réduit"
+   (rebond du ballon via motion-safe:, et le wipe ci-dessous). */
+
+/* Wipe 28° : trois bandes (royal, navy, vert) balaient l'écran.
+   280 ms pour entrer, 120 ms de pause, 280 ms pour sortir, décalage de 60 ms entre bandes. */
+.wipe-band {
+  position: absolute; top: 0; bottom: 0; left: -300px; width: calc(100% + 600px);
+  animation: wipe 680ms linear both;
+}
+@keyframes wipe {
+  0%   { transform: skewX(-28deg) translateX(-130%); animation-timing-function: ease-out; }
+  41%  { transform: skewX(-28deg) translateX(0); }
+  59%  { transform: skewX(-28deg) translateX(0); animation-timing-function: ease-in; }
+  100% { transform: skewX(-28deg) translateX(130%); }
+}
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .wipe { display: none; }
+}
+
+/* Apparition d'un gros texte (après le wipe) */
+.reveal { animation: reveal 220ms ease-out both; }
+@keyframes reveal {
+  from { opacity: 0; transform: scale(.9); }
+}
+
+/* Points de la trajectoire du ballon : apparaissent un par un */
+.dot { animation: dot-in 1ms both; }
+@keyframes dot-in {
+  from { opacity: 0; }
 }

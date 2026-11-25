@@ -33,6 +33,9 @@ export const ZONES = ['left', 'center', 'right']
 // Position du gardien dans les cages : 0 = poteau gauche, 1 = poteau droit
 export const KEEPER_ZONE = { left: 0, center: 0.5, right: 1 }
 
+// Inclinaison du gardien (en degrés) quand il plonge : un peu vers le côté du plongeon
+export const KEEPER_TILT = { left: -25, center: 0, right: 25 }
+
 // Où part le ballon quand le tir est raté, selon le côté choisi
 export const MISS_BALL = { left: 'wideLeft', center: 'over', right: 'wideRight' }
 

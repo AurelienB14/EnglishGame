@@ -5,9 +5,12 @@ import Star from '../component/star'
 import Button from '../component/button'
 import Scoreboard from '../component/scoreboard'
 import BonusMenu from '../component/bonus_menu'
+import Wipe from '../component/wipe'
+import Trajectory from '../component/trajectory'
 import {
   CHANCES,
   GOALS_TO_WIN,
+  KEEPER_TILT,
   KEEPER_ZONE,
   LEVELS,
   MATCH_SECONDS,
@@ -142,6 +145,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   const [keeperOk, setKeeperOk] = useState(null)
   const [shot, setShot] = useState(null)
   const [ball, setBall] = useState(null) // position du ballon pendant le tir
+  const [flight, setFlight] = useState(null) // trajectoire { from, to } une fois le ballon parti
 
   const shooterLevel = LEVELS[levelIndex]
   const keeperLevel = LEVELS[levelIndex + 1]
@@ -154,32 +158,21 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   const range = g.w - keeperW
 
   // Gardien : va-et-vient tant que patrol vaut true
-  const keeperRef = useRef(null)
+  const keeperRef = useRef(null) // la case du gardien (position)
+  const keeperBodyRef = useRef(null) // son pictogramme (inclinaison pendant le plongeon)
   const patrol = useRef(true)
 
   const [bonus, setBonus] = useState({ double: false, power: false })
 
   // Chrono du match (en secondes). Il s'arrête à 10:00 et se met en pause quand le menu est ouvert.
   const [elapsed, setElapsed] = useState(0)
-  const elapsedRef = useRef(0) // copie lisible depuis les timers du tir (sinon ils verraient une valeur périmée)
-  const [lastShot, setLastShot] = useState(false) // vrai si le tir qui vient d'être joué était le dernier
   const timeUp = elapsed >= MATCH_SECONDS
-
-  useEffect(() => {
-    elapsedRef.current = elapsed
-  }, [elapsed])
 
   useEffect(() => {
     if (paused) return
     const id = setInterval(() => setElapsed((e) => Math.min(e + 1, MATCH_SECONDS)), 1000)
     return () => clearInterval(id)
   }, [paused])
-
-  // Affiche le résultat du tir. Si le temps était déjà écoulé, c'était le dernier tir.
-  const showOutcome = () => {
-    setLastShot(elapsedRef.current >= MATCH_SECONDS)
-    setPhase('outcome')
-  }
 
   // Timers du tir : on les garde pour pouvoir les annuler si le composant disparaît
   const timers = useRef([])
@@ -204,11 +197,15 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     return () => cancelAnimationFrame(frame)
   }, [range])
 
-  const moveKeeper = (fraction, ms) => {
+  // Déplace le gardien vers une zone ('left' | 'center' | 'right') en l'inclinant un peu côté plongeon
+  const moveKeeper = (zone, ms) => {
     const el = keeperRef.current
-    if (!el) return
+    const body = keeperBodyRef.current
+    if (!el || !body) return
     el.style.transition = `left ${ms}ms ease-out`
-    el.style.left = `${fraction * range}px`
+    el.style.left = `${KEEPER_ZONE[zone] * range}px`
+    body.style.transition = `transform ${ms}ms ease-out`
+    body.style.transform = `rotate(${KEEPER_TILT[zone]}deg)`
   }
 
   // Tirage au sort de la difficulté
@@ -242,19 +239,22 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
 
     // 1. Le gardien arrête son va-et-vient et revient au milieu
     patrol.current = false
-    moveKeeper(KEEPER_ZONE.center, 400)
-    setBall({ x: viewport.width / 2, y: viewport.height * MIDDLE_Y, scale: 1 })
+    moveKeeper('center', 400)
+    const from = { x: viewport.width / 2, y: viewport.height * MIDDLE_Y }
+    setBall({ ...from, scale: 1 })
 
-    // 2. Le ballon part, le gardien plonge
+    // 2. Le ballon part (avec sa trajectoire en points), le gardien plonge
     later(() => {
-      setBall({ ...ballTarget(res.ball), scale: 0.7 })
-      moveKeeper(KEEPER_ZONE[res.keeper], 300)
+      const to = ballTarget(res.ball)
+      setBall({ ...to, scale: 0.7 })
+      setFlight({ from, to })
+      moveKeeper(res.keeper, 300)
     }, 500)
 
     // 3. Résultat
     later(() => {
       if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
-      showOutcome()
+      setPhase('outcome')
     }, 1300)
   }
 
@@ -275,7 +275,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     } else {
       // Pas de tir : "Keeper bonus" si le gardien a bon, sinon "No shot"
       setShot({ result: ok ? 'bonus' : 'nothing' })
-      showOutcome()
+      setPhase('outcome')
     }
   }
 
@@ -287,7 +287,12 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   }
 
   const next = () => {
+    // Le gardien reprend son va-et-vient, sans animation de retour et sans inclinaison
     if (keeperRef.current) keeperRef.current.style.transition = 'none'
+    if (keeperBodyRef.current) {
+      keeperBodyRef.current.style.transition = 'none'
+      keeperBodyRef.current.style.transform = ''
+    }
     patrol.current = true
     setBonus({ double: false, power: false })
     setPhase('ready')
@@ -296,14 +301,16 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
     setKeeperOk(null)
     setShot(null)
     setBall(null)
-    setLastShot(false)
+    setFlight(null)
     nextTurn()
   }
 
-  // Le match se termine sur le résultat d'un tir : 7 buts, ou dernier tir joué après les 10 minutes.
-  // (Calculé à chaque affichage : un VAR qui retire un but peut donc relancer le match.)
+  // Le match se termine sur le résultat d'un tir : 7 buts, ou temps écoulé.
+  // Le tir en cours (ou le prochain si aucun n'est lancé) est donc le dernier : même si le chrono
+  // finit pendant qu'on regarde le résultat, on ne peut plus relancer de tir.
+  // (Calculé à chaque affichage : un VAR qui retire un but peut relancer le match.)
   const matchOver =
-    phase === 'outcome' && (lastShot || score.blue >= GOALS_TO_WIN || score.green >= GOALS_TO_WIN)
+    phase === 'outcome' && (timeUp || score.blue >= GOALS_TO_WIN || score.green >= GOALS_TO_WIN)
 
   const toggleBonus = (id) => {
     setBonus((b) => ({ ...b, [id]: !b[id] }))
@@ -338,7 +345,9 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
 
         {ratio && (
           <div ref={keeperRef} className="absolute bottom-0" style={{ width: keeperW, height: keeperH }}>
-            <Player name={keeper.name} number={keeper.number} team={keeper.team} pose="keeper" />
+            <div ref={keeperBodyRef} className="size-full">
+              <Player name={keeper.name} number={keeper.number} team={keeper.team} pose="keeper" />
+            </div>
             <span className="name-pill absolute left-1/2 top-full mt-0.5 -translate-x-1/2">{keeper.name}</span>
           </div>
         )}
@@ -408,7 +417,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
         )}
 
         {phase === 'rolling' && (
-          <div className="relative size-[150px] motion-safe:animate-draw">
+          <div className="relative size-[150px] animate-draw">
             {LEVELS.slice(0, 3).map((l, i) => {
               const angle = (i * 2 * Math.PI) / 3
               return (
@@ -430,7 +439,9 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
         {phase === 'outcome' && (
           <p
             role="status"
-            className={`whitespace-nowrap font-display tracking-display text-outline-lg ${
+            // Après un but, le texte apparaît une fois le wipe passé
+            style={{ animationDelay: shot.result === 'goal' ? '300ms' : '0ms' }}
+            className={`reveal whitespace-nowrap font-display tracking-display text-outline-lg ${
               shot.result === 'goal' && !bonus.double
                 ? 'text-moment-xl max-[380px]:text-[88px]'
                 : 'text-moment max-[380px]:text-[56px]'
@@ -441,6 +452,12 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
           </p>
         )}
       </div>
+
+      {/* Wipe 28° sur un but */}
+      {phase === 'outcome' && shot.result === 'goal' && <Wipe key={turn} />}
+
+      {/* Trajectoire du ballon (sous le ballon) */}
+      {flight && <Trajectory from={flight.from} to={flight.to} />}
 
       {/* Ballon en vol */}
       {ball && (

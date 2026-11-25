@@ -1,6 +1,7 @@
 import Player from '../component/player'
 import Button from '../component/button'
 import { PLAYER_RATIO, TEAM_LABEL } from '../constants'
+import Wipe from '../component/wipe'
 import { useViewport } from '../viewport'
 
 function Trophy() {
@@ -83,8 +84,11 @@ function Result({ allPlayers, score, onRestart }) {
 
   return (
     <div className="flex h-dvh flex-col px-4" style={{ paddingTop: 'var(--pt)', paddingBottom: 'var(--pb)' }}>
+      {/* Transition d'arrivée : wipe 28°, puis le titre apparaît */}
+      <Wipe />
       <h2
-        className={`text-center font-display tracking-display text-outline-lg max-[380px]:text-[56px] ${
+        style={{ animationDelay: '300ms' }}
+        className={`reveal text-center font-display tracking-display text-outline-lg max-[380px]:text-[56px] ${
           draw ? 'text-[96px] leading-[86px] max-[380px]:text-[76px]' : 'text-moment leading-[64px]'
         }`}
       >

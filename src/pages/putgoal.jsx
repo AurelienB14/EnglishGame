@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import Button from '../component/button'
 import { clamp, goalToPx, useViewport } from '../viewport'
 
-const MIN_WIDTH = 80 // largeur minimale du goal, en px
+const MIN_WIDTH = 120 // largeur minimale du goal, en px (garde la poignée et le gardien utilisables)
 
 function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
   const viewport = useViewport()
@@ -44,13 +44,14 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
 
   return (
     <div className="relative h-dvh">
-      <p className="absolute left-1/2 top-4 -translate-x-1/2 whitespace-nowrap rounded-full bg-navy/80 px-4 py-1 font-condensed text-sm font-semibold uppercase tracking-brand text-white">
+      <h1 className="band absolute inset-x-0 h-[52px] text-[22px]" style={{ top: 'var(--pt)' }}>
         Cover the real goal
-      </p>
+      </h1>
 
       <div
         className="absolute touch-none"
         style={{ left: pos.x, top: pos.y, width: pos.w }}
+        aria-label="Goal overlay"
         onPointerDown={(e) => startDrag(e, 'move')}
         onPointerMove={onMove}
         onPointerUp={endDrag}
@@ -58,13 +59,30 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
       >
         <img ref={imgRef} src={goalimg} alt="" draggable={false} className="w-full select-none" />
         {/* Poignée de 40 px (taille minimale pour un doigt) */}
-        <div
-          className="absolute bottom-0 right-0 h-10 w-10 touch-none rounded-full border-2 border-navy bg-gold"
+        <button
+          type="button"
+          aria-label="Resize goal"
+          className="btn btn-round absolute bottom-1 right-1 touch-none border-[3px] shadow-hard-sm"
           onPointerDown={(e) => startDrag(e, 'resize')}
-        />
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+            <path
+              d="M6 14L14 6M9.5 6H14V10.5M6 9.5V14H10.5"
+              className="stroke-navy"
+              fill="none"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
 
-      <Button onClick={onConfirm} className="absolute bottom-12 left-1/2 w-52 -translate-x-1/2">
+      <Button
+        onClick={onConfirm}
+        className="absolute left-1/2 w-[220px] -translate-x-1/2"
+        style={{ bottom: 'var(--pb)' }}
+      >
         Set Goal
       </Button>
     </div>

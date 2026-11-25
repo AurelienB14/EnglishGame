@@ -8,22 +8,34 @@ html, body, #root {
 
 /* Fond de secours (si la caméra est refusée) */
 body {
-  background-color: var(--color-paper);
+  background-color: var(--color-offwhite);
+  font-family: var(--font-body);
+}
+
+/* Marges de sécurité (encoche, barre du bas) et hauteur de la zone d'action du match */
+:root {
+  --pt: max(calc(env(safe-area-inset-top, 0px) + 9px), 16px);
+  --pb: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  --action-h: 132px;
+}
+@media (max-height: 700px) {
+  :root { --action-h: 126px; }
 }
 
 /* "static" : toutes les variables sont toujours générées, même celles
    utilisées seulement en JS (ex. var(--color-easy) dans constants.js) */
 @theme static {
   --font-display: "Bebas Neue", sans-serif;
-  --font-condensed: "Barlow Condensed", sans-serif;
-  --font-sans: "Barlow", sans-serif;
+  --font-cond: "Barlow Condensed", sans-serif;
+  --font-body: "Barlow", sans-serif;
 
   --color-navy: #061A40;
   --color-royal: #0B3B8F;
   --color-white: #FFFFFF;
-  --color-paper: #F5F2EA; /* blanc cassé : fond de secours sans caméra */
   --color-gold: #DBA111;
-  --color-team-green: #35ab52;
+  --color-offwhite: #F5F2EA; /* fond de secours sans caméra */
+  --color-team-blue: #0B3B8F;
+  --color-team-green: #35AB52;
 
   /* Niveaux des cartes */
   --color-easy: #2FB463;
@@ -31,12 +43,220 @@ body {
   --color-hard: #D7263D;
   --color-extreme: #121417;
 
-  --tracking-brand: 0.08em;
+  /* Tailles de texte (Bebas Neue : titres, scores, gros moments ; Barlow Condensed : labels, boutons) */
+  --text-moment-xl: 112px; --text-moment-xl--line-height: .9;
+  --text-moment: 72px;     --text-moment--line-height: .9;
+  --text-title: 40px;      --text-title--line-height: 1;
+  --text-score: 36px;      --text-score--line-height: 1;
+  --text-level: 34px;      --text-level--line-height: 1;
+  --text-chrono: 24px;
+  --text-btn-lg: 22px;
+  --text-label: 20px;
+  --text-btn-sm: 16px;
+  --text-tag: 13px;
 
-  /* Petit rebond du ballon d'attente (transform seulement : léger pour le téléphone) */
-  --animate-ball-idle: ball-idle 1.2s ease-in-out infinite;
-  @keyframes ball-idle {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+  --tracking-display: .04em;
+  --tracking-label: .08em;
+  --radius-panel: 16px;
+
+  /* Ombres pleines, jamais de flou */
+  --shadow-hard-sm: 0 3px 0 var(--color-navy);
+  --shadow-hard: 0 4px 0 var(--color-navy);
+  --shadow-hard-lg: 0 6px 0 var(--color-navy);
+
+  /* Mouvements : transform seulement (léger pour le téléphone) */
+  --animate-ball: ball .9s infinite;
+  --animate-squash: squash .9s infinite;
+  --animate-draw: spin .8s linear infinite;
+  @keyframes ball {
+    0%, 100% { transform: translateY(0); animation-timing-function: cubic-bezier(.2, .6, .4, 1); }
+    50% { transform: translateY(-28px); animation-timing-function: cubic-bezier(.6, 0, .8, .4); }
   }
+  @keyframes squash {
+    0%, 100% { transform: scaleX(1); }
+    50% { transform: scaleX(.55); }
+  }
+}
+
+/* Gros moments : contour navy + ombre pleine (lisible sur caméra claire comme sombre) */
+@utility text-outline {
+  --o: var(--color-navy);
+  color: var(--color-white);
+  text-shadow: -2px -2px 0 var(--o), 2px -2px 0 var(--o),
+    -2px 2px 0 var(--o), 2px 2px 0 var(--o), 0 -2px 0 var(--o),
+    0 2px 0 var(--o), -2px 0 0 var(--o), 2px 0 0 var(--o), 0 5px 0 var(--o);
+}
+@utility text-outline-lg {
+  --o: var(--color-navy);
+  color: var(--color-white);
+  text-shadow: -3px -3px 0 var(--o), 3px -3px 0 var(--o),
+    -3px 3px 0 var(--o), 3px 3px 0 var(--o), 0 -3px 0 var(--o),
+    0 3px 0 var(--o), -3px 0 0 var(--o), 3px 0 0 var(--o),
+    0 8px 0 var(--o), 3px 8px 0 var(--o), -3px 8px 0 var(--o);
+}
+
+@layer components {
+  /* Boutons : pilule dorée, texte navy, ombre pleine */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    border-radius: 9999px; border: 2px solid var(--color-navy);
+    background: var(--color-gold); color: var(--color-navy); box-shadow: var(--shadow-hard);
+    font-family: var(--font-cond); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--tracking-label); line-height: 1; white-space: nowrap;
+    cursor: pointer; margin: 0;
+  }
+  /* État "appuyé" : le bouton descend de 4 px et l'ombre disparaît */
+  .btn:active:not(:disabled) { transform: translateY(4px); box-shadow: none; }
+  .btn-lg { height: 3.5rem; padding: 0 2rem; font-size: var(--text-btn-lg); min-width: 200px; }
+  .btn-sm { height: 2.5rem; padding: 0 1.25rem; font-size: var(--text-btn-sm); }
+  .btn-navy { background: var(--color-navy); color: var(--color-white); border-color: var(--color-white); }
+  .btn-wide { min-width: 0; width: 100%; padding: 0 .5rem; }
+  .btn-round { width: 2.5rem; height: 2.5rem; min-width: 0; padding: 0; border-radius: 50%; }
+  .btn-fab { position: relative; width: 3.5rem; height: 3.5rem; min-width: 0; padding: 0; border-radius: 50%; }
+  .btn:disabled {
+    background: color-mix(in srgb, var(--color-navy) 80%, transparent);
+    color: color-mix(in srgb, var(--color-white) 50%, transparent);
+    border-color: color-mix(in srgb, var(--color-white) 30%, transparent);
+    box-shadow: none; cursor: not-allowed;
+  }
+  .fab-badge {
+    position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--color-white); color: var(--color-navy); border: 2px solid var(--color-navy);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-cond); font-weight: 700; font-size: 14px; letter-spacing: 0;
+  }
+
+  /* Labels, bandeaux, pilules */
+  .tag {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 9999px;
+    background: var(--color-gold); color: var(--color-navy);
+    font-family: var(--font-cond); font-weight: 700; font-size: var(--text-tag);
+    letter-spacing: var(--tracking-label); text-transform: uppercase; line-height: 1; white-space: nowrap;
+  }
+  .band {
+    background: color-mix(in srgb, var(--color-navy) 80%, transparent); color: var(--color-white);
+    font-family: var(--font-cond); font-weight: 600; text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  .name-pill {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 9999px;
+    background: var(--color-navy); color: var(--color-white);
+    font-family: var(--font-cond); font-weight: 700; font-size: 14px;
+    letter-spacing: var(--tracking-label); text-transform: uppercase; white-space: nowrap;
+  }
+  .chrono {
+    display: inline-flex; align-items: center; height: 32px; padding: 0 16px; border-radius: 9999px;
+    background: var(--color-navy); color: var(--color-white);
+    font-family: var(--font-display); font-size: var(--text-chrono); letter-spacing: .06em; line-height: 1;
+  }
+
+  /* Panneaux */
+  .panel { border-radius: var(--radius-panel); border: 2px solid var(--color-navy); box-shadow: var(--shadow-hard); }
+  .p-blue { background: var(--color-team-blue); color: var(--color-white); }
+  .p-green { background: var(--color-team-green); color: var(--color-navy); }
+  .p-white { background: var(--color-white); color: var(--color-navy); }
+  .p-glass { background: color-mix(in srgb, var(--color-navy) 80%, transparent); color: var(--color-white); }
+  .p-navy { background: var(--color-navy); color: var(--color-white); }
+
+  /* Cartes joueur */
+  .pcard {
+    display: flex; align-items: center; gap: .5rem; height: 44px; padding-left: 6px;
+    border-radius: 9999px; background: var(--color-navy); color: var(--color-white); min-width: 0;
+  }
+  .pcard-num {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--color-white); color: var(--color-navy);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-size: 20px; line-height: 1; padding-top: 2px;
+  }
+  .pcard-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-cond); font-weight: 700; font-size: 18px;
+    letter-spacing: var(--tracking-label); text-transform: uppercase;
+  }
+  .pcard-x {
+    flex: none; width: 40px; height: 40px; border: 0; background: transparent; padding: 0;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .pslot {
+    height: 44px; border-radius: 9999px;
+    border: 2px dashed color-mix(in srgb, var(--color-white) 60%, transparent);
+    background: color-mix(in srgb, var(--color-navy) 25%, transparent);
+  }
+  @media (max-height: 700px) {
+    .pcard, .pslot { height: 40px; }
+    .pcard-num { width: 28px; height: 28px; }
+  }
+
+  /* Formulaire d'ajout d'un joueur */
+  .player-form {
+    display: flex; align-items: center; gap: .5rem; height: 56px; padding: 0 8px;
+    border-radius: 9999px; background: var(--color-navy); border: 2px solid var(--color-white);
+    box-shadow: var(--shadow-hard);
+  }
+  .player-num {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--color-white);
+    background: transparent; color: var(--color-white); text-align: center;
+    font-family: var(--font-display); font-size: 22px; padding: 2px 0 0; outline: none;
+  }
+  .player-name {
+    flex: 1; min-width: 0; height: 40px; border: 0; background: transparent; color: var(--color-white);
+    font-family: var(--font-body); font-weight: 600; font-size: 17px; padding: 0 4px; outline: none;
+  }
+  .player-name::placeholder { color: color-mix(in srgb, var(--color-white) 60%, transparent); }
+  .team-select {
+    appearance: none; height: 40px; padding: 0 28px 0 12px; border-radius: 9999px;
+    border: 2px solid color-mix(in srgb, var(--color-white) 40%, transparent);
+    background: var(--color-navy); color: var(--color-white);
+    font-family: var(--font-cond); font-weight: 700; font-size: 16px;
+    letter-spacing: var(--tracking-label); text-transform: uppercase; outline: none;
+  }
+  .player-form.is-disabled { border-color: color-mix(in srgb, var(--color-white) 40%, transparent); }
+  .player-form.is-disabled .player-num,
+  .player-form.is-disabled .team-select {
+    border-color: color-mix(in srgb, var(--color-white) 25%, transparent);
+    color: color-mix(in srgb, var(--color-white) 40%, transparent);
+  }
+
+  /* Tableau des scores : noms sur navy, score sur doré */
+  .sb {
+    display: flex; height: 48px; border: 2px solid var(--color-navy);
+    border-radius: var(--radius-panel); overflow: hidden; box-shadow: var(--shadow-hard);
+  }
+  .sb-team {
+    width: 100px; display: flex; align-items: center; justify-content: center;
+    background: var(--color-navy); color: var(--color-white);
+    font-family: var(--font-cond); font-weight: 700; font-size: 20px;
+    letter-spacing: var(--tracking-label); text-transform: uppercase;
+  }
+  .sb-blue { box-shadow: inset 0 -5px 0 var(--color-team-blue); }
+  .sb-green { box-shadow: inset 0 -5px 0 var(--color-team-green); }
+  .sb-score {
+    width: 104px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--color-gold); color: var(--color-navy);
+    font-family: var(--font-display); font-size: var(--text-score); letter-spacing: var(--tracking-display);
+    line-height: 1; padding-top: 3px;
+  }
+
+  /* Panneaux de carte, couleur du niveau (texte navy sur Easy/Medium pour le contraste) */
+  .cardp {
+    border-radius: var(--radius-panel); border: 2px solid var(--color-navy);
+    box-shadow: var(--shadow-hard); padding: 14px;
+  }
+  @media (max-height: 700px) { .cardp { padding: 12px; } }
+  .lv-easy { background: var(--color-easy); color: var(--color-navy); }
+  .lv-medium { background: var(--color-medium); color: var(--color-navy); }
+  .lv-hard { background: var(--color-hard); color: var(--color-white); }
+  .lv-extreme { background: var(--color-extreme); color: var(--color-white); border-color: var(--color-white); }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+}
+
+/* Mouvement réduit : on coupe toutes les animations */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

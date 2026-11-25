@@ -5,141 +5,160 @@ const MAX_PLAYERS = 6
 const MAX_TEAM = 3
 
 const TEAMS = [
-{ id: 'blue', label: 'Blue team', panel: 'bg-royal text-white' },
-{ id: 'green', label: 'Green team', panel: 'bg-team-green text-white' },
+  { id: 'blue', label: 'Blue team', panel: 'p-blue' },
+  { id: 'green', label: 'Green team', panel: 'p-green' }, // texte navy : le blanc sur vert est trop peu contrasté
 ]
 
 function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kickOff }) {
-    const players = allPlayers.map((j, i) => ({ ...j, i }))
-    const byTeam = (team) => players.filter((j) => j.team === team)
+  const players = allPlayers.map((p, i) => ({ ...p, i }))
+  const byTeam = (team) => players.filter((p) => p.team === team)
 
-    const blue = byTeam('blue')
-    const green = byTeam('green')
-    const random = byTeam('random')
+  const blue = byTeam('blue')
+  const green = byTeam('green')
+  const random = byTeam('random')
 
-    const isFull = allPlayers.length >= MAX_PLAYERS
-    const canKickOff = random.length === 0 && blue.length >= 1 && green.length >= 1
+  const isFull = allPlayers.length >= MAX_PLAYERS
+  const canKickOff = random.length === 0 && blue.length >= 1 && green.length >= 1
 
-    const add = (e) => {
-        e.preventDefault()
-        const data = new FormData(e.target)
-        const name = data.get('name').trim()
-        const number = data.get('number')
-        const team = data.get('team')
+  const add = (e) => {
+    e.preventDefault()
+    if (isFull) return
+    const data = new FormData(e.target)
+    const name = data.get('name').trim()
+    const number = data.get('number')
+    const team = data.get('team')
 
-        if (name === '' || isFull) return
-        if (team !== 'random' && byTeam(team).length >= MAX_TEAM) return
-        newPlayers(name, number, team)
-        e.target.reset()
-    }
+    if (name === '') return
+    if (team !== 'random' && byTeam(team).length >= MAX_TEAM) return
+    newPlayers(name, number, team)
+    e.target.reset()
+  }
 
-    return (
-        <div className="flex h-dvh flex-col p-4">
-        <h2 className="text-center font-display text-5xl uppercase tracking-wide text-white [text-shadow:3px_3px_0_var(--color-navy)]">
-            Choose your players
-        </h2>
-        
-        <form
-            onSubmit={add}
-            className="mt-4 flex shrink-0 items-center gap-2 rounded-full border-2 border-white bg-navy/80 p-[5px]"
-        >
+  return (
+    <div className="flex h-dvh flex-col px-4" style={{ paddingTop: 'var(--pt)', paddingBottom: 'var(--pb)' }}>
+      <h2 className="text-center font-display text-title tracking-display text-outline max-[380px]:text-[34px]">
+        Choose your players
+      </h2>
+
+      {/* Formulaire : numéro, nom (8 lettres max pour tenir sur le maillot), équipe, + */}
+      <form onSubmit={add} className={`player-form mt-4 ${isFull ? 'is-disabled' : ''}`} aria-label="Add a player">
+        <label className="sr-only" htmlFor="player-number">Number</label>
+        <input
+          id="player-number"
+          name="number"
+          type="text"
+          inputMode="numeric"
+          maxLength={2}
+          placeholder="#"
+          disabled={isFull}
+          className="player-num"
+        />
+
+        {isFull ? (
+          <div className="flex min-w-0 flex-1 items-center pl-1">
+            <span className="tag">Squad full</span>
+          </div>
+        ) : (
+          <>
+            <label className="sr-only" htmlFor="player-name">Player name</label>
             <input
-            type="number"
-            inputMode="numeric"
-            name="number"
-            placeholder="#"
-            disabled={isFull}
-            className="h-10 w-10 shrink-0 rounded-full border-2 border-white bg-transparent text-center font-condensed font-bold text-white outline-none placeholder:text-white/50"
+              id="player-name"
+              name="name"
+              type="text"
+              maxLength={8}
+              placeholder="Player name"
+              autoComplete="off"
+              className="player-name"
             />
-            <input
-            type="text"
-            name="name"
-            placeholder={isFull ? 'Squad full' : 'Name'}
-            disabled={isFull}
-            className="h-10 min-w-0 flex-1 bg-transparent text-center text-white outline-none placeholder:text-white/50"
-            />
-            <select
-            name="team"
-            defaultValue="random"
-            disabled={isFull}
-            className="h-10 rounded-full bg-white px-3 font-condensed font-bold uppercase tracking-brand text-navy outline-none"
-            >
+          </>
+        )}
+
+        <div className="relative flex-none">
+          <label className="sr-only" htmlFor="player-team">Team</label>
+          <select id="player-team" name="team" defaultValue="random" disabled={isFull} className="team-select">
             <option value="random">Random</option>
             <option value="blue" disabled={blue.length >= MAX_TEAM}>Blue</option>
             <option value="green" disabled={green.length >= MAX_TEAM}>Green</option>
-            </select>
-            <button
-            type="submit"
-            aria-label="Add player"
-            disabled={isFull}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold font-display text-3xl leading-none text-navy disabled:opacity-40"
-            >
-            +
-            </button>
-        </form>
-
-        <div className="flex flex-1 flex-col justify-center gap-3">
-            {TEAMS.map((t) => {
-            const teamPlayers = byTeam(t.id)
-
-            return (
-                <section key={t.id} className={`rounded-2xl p-2 ${t.panel}`}>
-                <h3 className="mb-1.5 text-center font-display text-xl uppercase tracking-wide">
-                    {t.label}
-                </h3>
-
-                <ul className="flex h-[62px] items-center justify-center gap-2">
-                    {teamPlayers.length === 0 ? (
-                    <li className="text-sm opacity-60">No players yet</li>
-                    ) : (
-                    teamPlayers.map((j) => (
-                        <ChoosingPlayersTeamCard
-                        key={j.i}
-                        name={j.name}
-                        number={j.number}
-                        dot="bg-navy text-white border-white"
-                        onDelete={() => deletePlayers(j.i)}
-                        />
-                    ))
-                    )}
-                </ul>
-                </section>
-            )
-            })}
-
-            <div className="h-[182px] shrink-0">
-            {random.length > 0 && (
-                <section className="flex h-full flex-col rounded-2xl bg-white p-2 text-navy">
-                <div className="mb-1.5 flex items-center justify-between px-1">
-                    <h3 className="font-display text-xl uppercase tracking-wide">Random</h3>
-                    <Button size="sm" onClick={drawTeams}>
-                        Draw teams
-                    </Button>
-                    </div>
-
-                <ul className="flex flex-1 flex-wrap content-center justify-center gap-2">
-                    {random.map((j) => (
-                    <ChoosingPlayersTeamCard
-                        key={j.i}
-                        name={j.name}
-                        number={j.number}
-                        dot="bg-navy text-gold border-gold"
-                        onDelete={() => deletePlayers(j.i)}
-                    />
-                    ))}
-                </ul>
-                </section>
-            )}
-            </div>
+          </select>
+          <svg
+            width="12"
+            height="8"
+            viewBox="0 0 12 8"
+            aria-hidden="true"
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+          >
+            <path
+              d="M1.5 1.5L6 6L10.5 1.5"
+              fill="none"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={isFull ? 'stroke-white/40' : 'stroke-white'}
+            />
+          </svg>
         </div>
 
-        <div className="flex shrink-0 gap-3">
-            <Button onClick={kickOff} disabled={!canKickOff} className="flex-1">
-            Kick off
+        <button type="submit" disabled={isFull} aria-label="Add player" className="btn btn-round">
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M9 2V16M2 9H16" className="stroke-current" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        </button>
+      </form>
+
+      {/* Panneaux d'équipe : 3 places chacun */}
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        {TEAMS.map((t) => {
+          const teamPlayers = byTeam(t.id)
+          return (
+            <section key={t.id} className={`panel ${t.panel} p-2.5`} aria-label={t.label}>
+              <h3 className="mb-2 ml-1 font-display text-2xl leading-7 tracking-display uppercase">{t.label}</h3>
+              <ul className="flex flex-col gap-1.5">
+                {teamPlayers.map((p) => (
+                  <ChoosingPlayersTeamCard
+                    key={p.i}
+                    name={p.name}
+                    number={p.number}
+                    onDelete={() => deletePlayers(p.i)}
+                  />
+                ))}
+                {Array.from({ length: MAX_TEAM - teamPlayers.length }, (_, k) => (
+                  <li key={`slot-${k}`} className="pslot" aria-hidden="true" />
+                ))}
+              </ul>
+            </section>
+          )
+        })}
+      </div>
+
+      {/* Joueurs sans équipe */}
+      {random.length > 0 && (
+        <section className="panel p-white mt-3 p-3" aria-label="Random">
+          <div className="mb-2 flex h-10 items-center justify-between">
+            <h3 className="ml-1 font-display text-2xl leading-7 tracking-display uppercase">Random</h3>
+            <Button size="sm" onClick={drawTeams}>
+              Draw teams
             </Button>
-        </div>
-        </div>
-    )
+          </div>
+          <ul className="grid grid-cols-2 gap-2">
+            {random.map((p) => (
+              <ChoosingPlayersTeamCard
+                key={p.i}
+                name={p.name}
+                number={p.number}
+                onDelete={() => deletePlayers(p.i)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="mt-auto flex justify-center pt-3">
+        <Button onClick={kickOff} disabled={!canKickOff} className="w-[220px]">
+          Kick off
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export default ChoosingPlayers

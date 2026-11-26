@@ -195,11 +195,6 @@ body {
     border-radius: 9999px; background: var(--color-navy); border: 2px solid var(--color-white);
     box-shadow: var(--shadow-hard);
   }
-  .player-num {
-    flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--color-white);
-    background: transparent; color: var(--color-white); text-align: center;
-    font-family: var(--font-display); font-size: 22px; padding: 2px 0 0; outline: none;
-  }
   .player-name {
     flex: 1; min-width: 0; height: 40px; border: 0; background: transparent; color: var(--color-white);
     font-family: var(--font-body); font-weight: 600; font-size: 17px; padding: 0 4px; outline: none;
@@ -213,7 +208,6 @@ body {
     letter-spacing: var(--tracking-label); text-transform: uppercase; outline: none;
   }
   .player-form.is-disabled { border-color: color-mix(in srgb, var(--color-white) 40%, transparent); }
-  .player-form.is-disabled .player-num,
   .player-form.is-disabled .team-select {
     border-color: color-mix(in srgb, var(--color-white) 25%, transparent);
     color: color-mix(in srgb, var(--color-white) 40%, transparent);

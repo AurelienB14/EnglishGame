@@ -19,6 +19,7 @@ import {
   ZONES,
 } from '../constants'
 import { clamp, goalToPx, useViewport } from '../viewport'
+import { playSound, RESULT_SOUNDS, stopSounds } from '../sounds'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
 const SHOOTER_WIDTH = 128 // largeur du tireur (px) ; 100 sur écran bas (hauteur ≤ 700)
@@ -280,6 +281,10 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
     if (phase !== 'rolling') return
 
     const timer = setTimeout(() => {
+      // Le badge de niveau apparaît : fin du tirage, on coupe spin et on joue reveal
+      // (dans le callback du timer, qui est annulé par le nettoyage : un seul appel même en StrictMode)
+      stopSounds(['spin'])
+      playSound('reveal')
       setLevelIndex(Math.floor(Math.random() * 3)) // easy, medium ou hard
       setPhase('shooterCard')
     }, ROLL_TIME)
@@ -301,6 +306,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
 
     // 2. Quand le tireur arrive sur le ballon, il part (avec sa trajectoire en points) et le gardien plonge
     runUp(() => {
+      playSound('kick') // le ballon part
       const to = toScreen(res.ball)
       setBall({ ...to, scale: 0.7 })
       setFlight({ from, to })
@@ -309,28 +315,34 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
       // 3. Résultat, une fois le ballon arrivé (compté depuis la frappe, pas depuis le début de l'élan)
       later(() => {
         if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
+        RESULT_SOUNDS[res.result].forEach(playSound) // le texte du résultat s'affiche
         setPhase('outcome')
       }, BALL_FLIGHT_MS + 100)
     })
   }
 
   const shoot = () => {
+    playSound('spin') // les 3 ballons commencent à tourner
     setPhase('rolling')
   }
 
   const shooterAnswer = (ok) => {
+    playSound(ok ? 'correct' : 'incorrect')
     setShooterOk(ok)
     setPhase('keeperCard')
   }
 
   const keeperAnswer = (ok) => {
+    playSound(ok ? 'correct' : 'incorrect')
     setKeeperOk(ok)
     if (shooterOk) {
       // L'attaquant a bon : il choisit où tirer
       setPhase('aim')
     } else {
       // Pas de tir : "Keeper bonus" si le gardien a bon, sinon "No shot"
-      setShot({ result: ok ? 'bonus' : 'nothing' })
+      const result = ok ? 'bonus' : 'nothing'
+      setShot({ result })
+      RESULT_SOUNDS[result].forEach(playSound)
       setPhase('outcome')
     }
   }
@@ -343,6 +355,8 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
   }
 
   const next = () => {
+    // On coupe les réactions de la foule, mais pas l'ambiance du stade
+    stopSounds(['goal', 'save', 'saveCheer', 'miss'])
     // Le gardien reprend son va-et-vient, sans animation de retour et sans inclinaison
     if (keeperRef.current) {
       keeperRef.current.style.transition = 'none'

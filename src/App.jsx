@@ -15,6 +15,7 @@ import PutGoal from './pages/putgoal'
 import ChoosingPlayers from './pages/choosing_players'
 import Game from './pages/game'
 import Result from './pages/result'
+import { playSound, stopAllSounds, stopSounds } from './sounds'
 
 const shuffle = (array) => {
   const a = [...array]
@@ -55,8 +56,15 @@ function App() {
 
   const goToPlayers = () => setStep('choosingplayers')
 
-  const newPlayers = (name, number, team) => {
-    setAllPlayers((prev) => [...prev, { name, number, team }])
+  // Le numéro est automatique : le plus petit numéro libre (1, 2, 3... jusqu'à 6).
+  // Le premier joueur a le 1, le deuxième le 2... ; si on en supprime un, son numéro est réutilisé.
+  const newPlayers = (name, team) => {
+    setAllPlayers((prev) => {
+      const used = new Set(prev.map((p) => p.number))
+      let number = 1
+      while (used.has(number)) number++
+      return [...prev, { name, number, team }]
+    })
   }
 
   const deletePlayers = (i) => {
@@ -84,16 +92,30 @@ function App() {
         count[team]++
       })
 
-      return updated
+      // On mélange aussi l'ordre de la liste : c'est lui qui décide de l'ordre d'affichage dans les équipes
+      // et de l'ordre de passage des tireurs. Sans ça, chaque équipe garde l'ordre d'ajout des joueurs.
+      // (Les numéros restent attachés aux joueurs.)
+      return shuffle(updated)
     })
   }
 
-  const kickOff = () => setStep('game')
+  const kickOff = () => {
+    playSound('kickoff')
+    playSound('ambiance') // ambiance de stade en boucle pendant le match
+    setStep('game')
+  }
 
-  const finishMatch = () => setStep('result')
+  // Bouton "See result" : fanfare puis applaudissements en boucle (victoire ou égalité)
+  const finishMatch = () => {
+    stopSounds(['ambiance']) // les applaudissements prennent le relais
+    playSound('victory')
+    playSound('applause')
+    setStep('result')
+  }
 
   // Nouveau match : mêmes joueurs et même goal, score et tours remis à zéro
   const restart = () => {
+    stopAllSounds()
     setScore({ blue: 0, green: 0 })
     setTurn(0)
     setStep('choosingplayers')

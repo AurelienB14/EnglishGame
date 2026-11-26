@@ -25,12 +25,11 @@ function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kic
     if (isFull) return
     const data = new FormData(e.target)
     const name = data.get('name').trim()
-    const number = data.get('number')
     const team = data.get('team')
 
     if (name === '') return
     if (team !== 'random' && byTeam(team).length >= MAX_TEAM) return
-    newPlayers(name, number, team)
+    newPlayers(name, team) // le numéro est donné automatiquement par App
     e.target.reset()
   }
 
@@ -42,20 +41,8 @@ function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kic
 
       {/* Formulaire : numéro, nom (8 lettres max pour tenir sur le maillot), équipe, + */}
       <form onSubmit={add} className={`player-form mt-4 ${isFull ? 'is-disabled' : ''}`} aria-label="Add a player">
-        <label className="sr-only" htmlFor="player-number">Number</label>
-        <input
-          id="player-number"
-          name="number"
-          type="text"
-          inputMode="numeric"
-          maxLength={2}
-          placeholder="#"
-          disabled={isFull}
-          className="player-num"
-        />
-
         {isFull ? (
-          <div className="flex min-w-0 flex-1 items-center pl-1">
+          <div className="flex min-w-0 flex-1 items-center pl-3">
             <span className="tag">Squad full</span>
           </div>
         ) : (
@@ -68,7 +55,7 @@ function ChoosingPlayers({ allPlayers, newPlayers, deletePlayers, drawTeams, kic
               maxLength={8}
               placeholder="Player name"
               autoComplete="off"
-              className="player-name"
+              className="player-name pl-3"
             />
           </>
         )}

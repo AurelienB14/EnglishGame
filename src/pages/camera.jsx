@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
+const MIN_ZOOM = 0.5 // le plus dézoomé proposé (si le téléphone le permet)
+const MAX_ZOOM = 2 // le plus zoomé proposé
+
 // zoom : valeur voulue (null = minimum) · onZoomRange : appelé avec { min, max, step } si le zoom est géré
 // (passer une fonction stable, ex. le setter d'un useState)
 function Camera({ zoom = null, onZoomRange }) {
@@ -42,8 +45,11 @@ function Camera({ zoom = null, onZoomRange }) {
         trackRef.current = track
         const range = track?.getCapabilities?.().zoom
         if (range) {
-          track.applyConstraints({ advanced: [{ zoom: range.min }] }).catch(() => {})
-          onZoomRange({ min: range.min, max: range.max, step: range.step || 0.1 })
+          // Le curseur va de x0.5 (ou du minimum du téléphone s'il est plus haut) à x2 (ou son maximum)
+          const min = Math.max(range.min, MIN_ZOOM)
+          const max = Math.min(range.max, MAX_ZOOM)
+          track.applyConstraints({ advanced: [{ zoom: min }] }).catch(() => {})
+          if (max > min) onZoomRange({ min, max, step: Math.max(range.step || 0, 0.1) })
         }
 
         return video.play()

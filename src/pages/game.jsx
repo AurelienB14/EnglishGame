@@ -122,7 +122,7 @@ function AimPanel({ onPick }) {
   )
 }
 
-function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nextTurn, paused, onFinish }) {
+function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, paused, onFinish }) {
   const viewport = useViewport()
   const g = goalToPx(goal, viewport) // le goal en pixels pour la taille actuelle de l'écran
 
@@ -151,8 +151,7 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
   const keeperLevel = LEVELS[levelIndex + 1]
 
   // Taille du gardien : 36 % de la largeur du goal (sans dépasser 90 % de sa hauteur)
-  const [ratio, setRatio] = useState(null)
-  const goalH = ratio ? g.w * ratio : 0
+  const goalH = g.h
   const keeperW = Math.min(g.w * 0.36, goalH * 0.9 * PLAYER_RATIO)
   const keeperH = keeperW / PLAYER_RATIO
   const range = g.w - keeperW
@@ -334,26 +333,16 @@ function Game({ allPlayers, turn, goal, goalimg, score, addGoal, removeGoal, nex
       </div>
 
       {/* Cages (invisibles) + gardien */}
-      <div className="absolute" style={{ left: g.x, top: g.y, width: g.w }}>
-        <img
-          src={goalimg}
-          alt=""
-          draggable={false}
-          className="invisible w-full select-none"
-          onLoad={(e) => setRatio(e.target.naturalHeight / e.target.naturalWidth)}
-        />
-
-        {ratio && (
-          <div ref={keeperRef} className="absolute bottom-0" style={{ width: keeperW, height: keeperH }}>
-            <div ref={keeperBodyRef} className="size-full">
-              <Player name={keeper.name} number={keeper.number} team={keeper.team} pose="keeper" />
-            </div>
-            <span className="name-pill absolute left-1/2 top-full mt-0.5 -translate-x-1/2">{keeper.name}</span>
+      <div className="absolute" style={{ left: g.x, top: g.y, width: g.w, height: g.h }}>
+        <div ref={keeperRef} className="absolute bottom-0" style={{ width: keeperW, height: keeperH }}>
+          <div ref={keeperBodyRef} className="size-full">
+            <Player name={keeper.name} number={keeper.number} team={keeper.team} pose="keeper" />
           </div>
-        )}
+          <span className="name-pill absolute left-1/2 top-full mt-0.5 -translate-x-1/2">{keeper.name}</span>
+        </div>
 
         {/* Trois zones cliquables par-dessus le goal (phase aim) : trait navy sous un trait doré */}
-        {ratio && phase === 'aim' && (
+        {phase === 'aim' && (
           <div className="absolute inset-0 flex gap-2">
             {ZONES.map((z) => (
               <button

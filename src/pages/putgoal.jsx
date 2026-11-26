@@ -2,13 +2,15 @@ import { useRef } from 'react'
 import Button from '../component/button'
 import { clamp, goalToPx, useViewport } from '../viewport'
 
-const MIN_WIDTH = 120 // largeur minimale du goal, en px (garde la poignée et le gardien utilisables)
+// Taille minimale du goal, en px (garde la poignée et le gardien utilisables)
+const MIN_WIDTH = 120
+const MIN_HEIGHT = 60
 
-function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
+// zoomRange / zoom / onZoom : curseur de zoom de la caméra, affiché seulement si le téléphone le permet
+function PutGoal({ goal, setGoal, onConfirm, goalimg, zoomRange, zoom, onZoom }) {
   const viewport = useViewport()
   const pos = goalToPx(goal, viewport)
 
-  const imgRef = useRef(null)
   const drag = useRef(null) // geste en cours : { mode: 'move' | 'resize', point de départ, goal de départ }
 
   const startDrag = (e, mode) => {
@@ -16,7 +18,7 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
     e.currentTarget.setPointerCapture(e.pointerId)
     // Sans ça, toucher la poignée déclencherait aussi le déplacement du goal
     e.stopPropagation()
-    drag.current = { mode, px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, w: pos.w }
+    drag.current = { mode, px: e.clientX, py: e.clientY, x: pos.x, y: pos.y, w: pos.w, h: pos.h }
   }
 
   const onMove = (e) => {
@@ -24,17 +26,16 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
     if (!d) return
     const dx = e.clientX - d.px
     const dy = e.clientY - d.py
-    // Proportions de l'image (hauteur / largeur), pour garder le goal dans l'écran
-    const ratio = imgRef.current.offsetHeight / imgRef.current.offsetWidth || 0.5
 
     if (d.mode === 'move') {
       const x = clamp(d.x + dx, 0, Math.max(0, viewport.width - d.w))
-      const y = clamp(d.y + dy, 0, Math.max(0, viewport.height - d.w * ratio))
+      const y = clamp(d.y + dy, 0, Math.max(0, viewport.height - d.h))
       setGoal((prev) => ({ ...prev, x: x / viewport.width, y: y / viewport.height }))
     } else {
-      const maxW = Math.min(viewport.width - d.x, (viewport.height - d.y) / ratio)
-      const w = clamp(d.w + dx, MIN_WIDTH, Math.max(MIN_WIDTH, maxW))
-      setGoal((prev) => ({ ...prev, w: w / viewport.width }))
+      // Redimensionnement libre : glisser en largeur change la largeur, en hauteur la hauteur
+      const w = clamp(d.w + dx, MIN_WIDTH, Math.max(MIN_WIDTH, viewport.width - d.x))
+      const h = clamp(d.h + dy, MIN_HEIGHT, Math.max(MIN_HEIGHT, viewport.height - d.y))
+      setGoal((prev) => ({ ...prev, w: w / viewport.width, h: h / viewport.height }))
     }
   }
 
@@ -50,15 +51,16 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
 
       <div
         className="absolute touch-none"
-        style={{ left: pos.x, top: pos.y, width: pos.w }}
+        style={{ left: pos.x, top: pos.y, width: pos.w, height: pos.h }}
         aria-label="Goal overlay"
         onPointerDown={(e) => startDrag(e, 'move')}
         onPointerMove={onMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       >
-        <img ref={imgRef} src={goalimg} alt="" draggable={false} className="w-full select-none" />
-        {/* Poignée de 40 px (taille minimale pour un doigt) */}
+        {/* L'image est étirée à la taille du cadre (goal.svg a preserveAspectRatio="none") */}
+        <img src={goalimg} alt="" draggable={false} className="size-full select-none" />
+        {/* Poignée de 40 px (taille minimale pour un doigt) : largeur et hauteur en même temps */}
         <button
           type="button"
           aria-label="Resize goal"
@@ -77,6 +79,28 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
           </svg>
         </button>
       </div>
+
+      {zoomRange && (
+        <div
+          className="panel p-glass absolute left-1/2 flex h-12 w-[calc(100%-2rem)] max-w-[320px] -translate-x-1/2 items-center gap-3 rounded-full px-4"
+          style={{ bottom: 'calc(var(--pb) + 56px + 12px)' }}
+        >
+          <label htmlFor="camera-zoom" className="font-cond text-sm font-bold uppercase tracking-label">
+            Zoom
+          </label>
+          <input
+            id="camera-zoom"
+            type="range"
+            min={zoomRange.min}
+            max={zoomRange.max}
+            step={zoomRange.step}
+            value={zoom}
+            onChange={(e) => onZoom(Number(e.target.value))}
+            className="h-10 min-w-0 flex-1 accent-gold"
+          />
+          <span className="w-10 text-right font-display text-xl">{zoom.toFixed(1)}x</span>
+        </div>
+      )}
 
       <Button
         onClick={onConfirm}

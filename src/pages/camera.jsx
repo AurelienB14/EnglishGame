@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 
-function Camera() {
+// zoom : valeur voulue (null = minimum) · onZoomRange : appelé avec { min, max, step } si le zoom est géré
+// (passer une fonction stable, ex. le setter d'un useState)
+function Camera({ zoom = null, onZoomRange }) {
   const videoRef = useRef(null)
+  const trackRef = useRef(null) // la piste vidéo, pour changer le zoom sans relancer la caméra
   // Si la caméra n'existe pas (HTTP, ancien navigateur), on affiche le fond de secours directement
   const [failed, setFailed] = useState(() => !navigator.mediaDevices?.getUserMedia)
 
@@ -31,6 +34,18 @@ function Camera() {
         }
         stream = s
         video.srcObject = s
+
+        // Certains téléphones démarrent la caméra déjà zoomée (ex. 2x). Quand le navigateur gère
+        // le zoom (Chrome Android), on le remet au minimum pour avoir la même vue large partout,
+        // et on prévient l'app pour qu'elle propose un curseur de zoom.
+        const track = s.getVideoTracks()[0]
+        trackRef.current = track
+        const range = track?.getCapabilities?.().zoom
+        if (range) {
+          track.applyConstraints({ advanced: [{ zoom: range.min }] }).catch(() => {})
+          onZoomRange({ min: range.min, max: range.max, step: range.step || 0.1 })
+        }
+
         return video.play()
       })
       .catch((err) => {
@@ -41,10 +56,17 @@ function Camera() {
 
     return () => {
       cancelled = true
+      trackRef.current = null
       stream?.getTracks().forEach((t) => t.stop())
       video.srcObject = null
     }
-  }, [])
+  }, [onZoomRange])
+
+  // Quand le joueur règle le curseur de zoom
+  useEffect(() => {
+    if (zoom == null) return
+    trackRef.current?.applyConstraints({ advanced: [{ zoom }] }).catch(() => {})
+  }, [zoom])
 
   return (
     <video

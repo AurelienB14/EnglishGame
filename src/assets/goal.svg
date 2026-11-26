@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="316" height="116" viewBox="0 0 316 116">
+<svg xmlns="http://www.w3.org/2000/svg" width="316" height="116" viewBox="0 0 316 116" preserveAspectRatio="none">
   <!-- Fond sombre derrière le filet, pour qu'il reste visible sur la caméra -->
   <rect x="10" y="10" width="296" height="104" fill="#061A40" fill-opacity="0.18"/>
 

@@ -21,6 +21,9 @@ import {
 import { goalToPx, useViewport } from '../viewport'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
+const SHOOTER_WIDTH = 128 // largeur du tireur (px) ; 100 sur écran bas (hauteur ≤ 700)
+const SHOOTER_WIDTH_SMALL = 100
+const KEEPER_MAX_RATIO = 0.6 // le gardien fait au plus 60 % de la hauteur du tireur (effet de profondeur)
 const ROLL_TIME = 1500 // durée du tirage, en ms
 // Hauteur du ballon, du tirage, du badge de niveau et du résultat (fraction de l'écran) :
 // entre le goal et le tireur, sans chevaucher ni l'un ni l'autre
@@ -152,8 +155,12 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
 
   // Taille du gardien : 36 % de la largeur du goal (sans dépasser 90 % de sa hauteur)
   const goalH = g.h
-  const keeperW = Math.min(g.w * 0.36, goalH * 0.9 * PLAYER_RATIO)
-  const keeperH = keeperW / PLAYER_RATIO
+  // Profondeur : le gardien est plus loin que le tireur, donc toujours plus petit que lui,
+  // même si le goal est très haut. Il suit la taille du goal (36 % de large, 90 % de haut) sans dépasser ce plafond.
+  const shooterW = viewport.height > 700 ? SHOOTER_WIDTH : SHOOTER_WIDTH_SMALL
+  const shooterH = shooterW / PLAYER_RATIO
+  const keeperH = Math.min((g.w * 0.36) / PLAYER_RATIO, goalH * 0.9, shooterH * KEEPER_MAX_RATIO)
+  const keeperW = keeperH * PLAYER_RATIO
   const range = g.w - keeperW
 
   // Gardien : va-et-vient tant que patrol vaut true
@@ -463,8 +470,8 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
 
       {/* Tireur : ancré en bas, ses jambes passent derrière les panneaux */}
       <div
-        className="pointer-events-none absolute left-1/2 w-[116px] -translate-x-1/2 [@media(max-height:700px)]:w-[92px]"
-        style={{ bottom: 'calc(var(--pb) + 64px)', aspectRatio: PLAYER_RATIO }}
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2"
+        style={{ bottom: 'calc(var(--pb) + 64px)', width: shooterW, aspectRatio: PLAYER_RATIO }}
       >
         <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
       </div>

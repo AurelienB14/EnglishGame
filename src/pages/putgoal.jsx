@@ -6,16 +6,7 @@ import { clamp, goalToPx, useViewport } from '../viewport'
 const MIN_WIDTH = 120
 const MIN_HEIGHT = 60
 
-// Nom court d'un objectif d'après son nom système ("Back Ultra Wide Camera" -> "Ultra wide")
-function lensName(label, index) {
-  if (/ultra/i.test(label)) return 'Ultra wide'
-  if (/tele/i.test(label)) return 'Tele'
-  return index === 0 ? 'Main' : `Lens ${index + 1}`
-}
-
-// zoomRange / zoom / onZoom : curseur de zoom de la caméra, affiché seulement si le téléphone le permet
-// lenses / onLens : choix de l'objectif (ex. ultra grand-angle), affiché s'il y en a plusieurs
-function PutGoal({ goal, setGoal, onConfirm, goalimg, zoomRange, zoom, onZoom, lenses, onLens }) {
+function PutGoal({ goal, setGoal, onConfirm, goalimg }) {
   const viewport = useViewport()
   const pos = goalToPx(goal, viewport)
 
@@ -86,47 +77,6 @@ function PutGoal({ goal, setGoal, onConfirm, goalimg, zoomRange, zoom, onZoom, l
             />
           </svg>
         </button>
-      </div>
-
-      {/* Réglages de la caméra : objectifs (s'il y en a plusieurs) et zoom (s'il est géré) */}
-      <div
-        className="absolute left-1/2 flex w-[calc(100%-2rem)] max-w-[320px] -translate-x-1/2 flex-col items-stretch gap-2"
-        style={{ bottom: 'calc(var(--pb) + 56px + 12px)' }}
-      >
-        {lenses.list.length > 1 && (
-          <div className="flex justify-center gap-2" role="group" aria-label="Camera lens">
-            {lenses.list.map((l, i) => (
-              <Button
-                key={l.id}
-                size="sm"
-                variant={l.id === lenses.active ? 'navy' : 'gold'}
-                aria-pressed={l.id === lenses.active}
-                onClick={() => onLens(l.id)}
-              >
-                {lensName(l.label, i)}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {zoomRange && (
-          <div className="panel p-glass flex h-12 items-center gap-3 rounded-full px-4">
-            <label htmlFor="camera-zoom" className="font-cond text-sm font-bold uppercase tracking-label">
-              Zoom
-            </label>
-            <input
-              id="camera-zoom"
-              type="range"
-              min={zoomRange.min}
-              max={zoomRange.max}
-              step={zoomRange.step}
-              value={zoom}
-              onChange={(e) => onZoom(Number(e.target.value))}
-              className="h-10 min-w-0 flex-1 accent-gold"
-            />
-            <span className="w-10 text-right font-display text-xl">{zoom.toFixed(1)}x</span>
-          </div>
-        )}
       </div>
 
       <Button

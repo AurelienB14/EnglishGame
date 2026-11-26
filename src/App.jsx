@@ -36,18 +36,6 @@ function App() {
   const [allPlayers, setAllPlayers] = useState([])
   const [turn, setTurn] = useState(0)
   const [score, setScore] = useState({ blue: 0, green: 0 })
-  // Zoom de la caméra : zoomRange = { min, max, step } si le téléphone le permet, zoom = valeur choisie (null = minimum)
-  const [zoomRange, setZoomRange] = useState(null)
-  const [zoom, setZoom] = useState(null)
-  // Objectifs arrière : lenses = { list: [{ id, label }], active }, lensId = objectif choisi (null = défaut)
-  const [lenses, setLenses] = useState({ list: [], active: null })
-  const [lensId, setLensId] = useState(null)
-
-  // Changer d'objectif remet le zoom au minimum
-  const chooseLens = (id) => {
-    setLensId(id)
-    setZoom(null)
-  }
 
   // Quitter le plein écran fait revenir le menu (avec CONTINUE)
   useEffect(() => {
@@ -123,19 +111,7 @@ function App() {
 
   let page = null
   if (step === 'putgoal') {
-    page = (
-      <PutGoal
-        goal={goal}
-        setGoal={setGoal}
-        onConfirm={goToPlayers}
-        goalimg={goalImg}
-        zoomRange={zoomRange}
-        zoom={zoom ?? zoomRange?.min}
-        onZoom={setZoom}
-        lenses={lenses}
-        onLens={chooseLens}
-      />
-    )
+    page = <PutGoal goal={goal} setGoal={setGoal} onConfirm={goToPlayers} goalimg={goalImg} />
   } else if (step === 'choosingplayers') {
     page = (
       <ChoosingPlayers
@@ -166,7 +142,7 @@ function App() {
 
   return (
     <>
-      <Camera zoom={zoom} lensId={lensId} onZoomRange={setZoomRange} onLenses={setLenses} />
+      <Camera />
       {page}
       {/* Le menu passe par-dessus : la page reste montée, la partie en cours n'est pas perdue */}
       {menuOpen && (

@@ -2,7 +2,7 @@
 
 // Fin de match : 7 buts, ou 10 minutes (puis un dernier tir)
 export const GOALS_TO_WIN = 7
-export const MATCH_SECONDS = 30 // TEST : remettre 10 * 60 pour le vrai match
+export const MATCH_SECONDS = 10 * 60
 
 export const TEAM_LABEL = { blue: 'Blue', green: 'Green' }
 

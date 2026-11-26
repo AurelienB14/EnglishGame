@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
+// Diagnostic caméra : affiché seulement si l'adresse contient ?debug
+const DEBUG = new URLSearchParams(window.location.search).has('debug')
+
 const MIN_ZOOM = 0.5 // le plus dézoomé proposé (si le téléphone le permet)
 const MAX_ZOOM = 2 // le plus zoomé proposé
 
@@ -13,6 +16,7 @@ function Camera({ zoom = null, lensId = null, onZoomRange, onLenses }) {
   const trackRef = useRef(null) // la piste vidéo, pour changer le zoom sans relancer la caméra
   // Si la caméra n'existe pas (HTTP, ancien navigateur), on affiche le fond de secours directement
   const [failed, setFailed] = useState(() => !navigator.mediaDevices?.getUserMedia)
+  const [debugInfo, setDebugInfo] = useState('')
 
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) return
@@ -60,6 +64,20 @@ function Camera({ zoom = null, lensId = null, onZoomRange, onLenses }) {
         // Les objectifs arrière (les noms ne sont connus qu'après l'autorisation de la caméra).
         // Sur iPhone on y trouve "Back Ultra Wide Camera" : c'est lui qui permet de dézoomer.
         const devices = await navigator.mediaDevices.enumerateDevices()
+        if (!cancelled && DEBUG) {
+          // Diagnostic (ouvrir le site avec ?debug à la fin de l'adresse)
+          const caps = track?.getCapabilities?.() ?? {}
+          const st = track?.getSettings?.() ?? {}
+          setDebugInfo(
+            [
+              `cameras: ${devices.filter((d) => d.kind === 'videoinput').map((d) => d.label || '(no label)').join(' | ') || 'none'}`,
+              `active: ${track?.label ?? '?'}`,
+              `zoom: ${caps.zoom ? `${caps.zoom.min} -> ${caps.zoom.max} (step ${caps.zoom.step})` : 'not supported'}`,
+              `stream: ${st.width}x${st.height} @${Math.round(st.frameRate ?? 0)}fps`,
+              `video: ${video.videoWidth}x${video.videoHeight} · screen: ${window.innerWidth}x${window.innerHeight}`,
+            ].join('\n'),
+          )
+        }
         if (!cancelled) {
           const list = devices
             .filter((d) => d.kind === 'videoinput' && /back|rear|environment/i.test(d.label))
@@ -90,13 +108,20 @@ function Camera({ zoom = null, lensId = null, onZoomRange, onLenses }) {
   }, [zoom])
 
   return (
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      muted
-      className={`fixed inset-0 -z-10 h-full w-full object-cover ${failed ? 'hidden' : ''}`}
-    />
+    <>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`fixed inset-0 -z-10 h-full w-full object-cover ${failed ? 'hidden' : ''}`}
+      />
+      {DEBUG && (
+        <pre className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] whitespace-pre-wrap bg-navy/90 p-2 font-mono text-[10px] leading-tight text-white">
+          {failed ? 'camera: unavailable or refused' : debugInfo || 'camera: starting…'}
+        </pre>
+      )}
+    </>
   )
 }
 

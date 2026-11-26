@@ -10,21 +10,24 @@ import Trajectory from '../component/trajectory'
 import {
   CHANCES,
   GOALS_TO_WIN,
-  KEEPER_TILT,
-  KEEPER_ZONE,
   LEVELS,
   MATCH_SECONDS,
-  MISS_BALL,
+  MAX_TILT,
+  MISS_AREA,
   PLAYER_RATIO,
+  ZONE_RANGE,
   ZONES,
 } from '../constants'
-import { goalToPx, useViewport } from '../viewport'
+import { clamp, goalToPx, useViewport } from '../viewport'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
 const SHOOTER_WIDTH = 128 // largeur du tireur (px) ; 100 sur écran bas (hauteur ≤ 700)
 const SHOOTER_WIDTH_SMALL = 100
 const KEEPER_MAX_RATIO = 0.6 // le gardien fait au plus 60 % de la hauteur du tireur (effet de profondeur)
 const ROLL_TIME = 1500 // durée du tirage, en ms
+const RUN_MS = 650 // élan du tireur vers le ballon (il accélère), en ms
+const STOP_MS = 130 // freinage du tireur après la frappe (il ralentit sans s'arrêter net), en ms
+const BALL_FLIGHT_MS = 600 // durée du vol du ballon (doit correspondre à duration-[600ms] plus bas)
 // Hauteur du ballon, du tirage, du badge de niveau et du résultat (fraction de l'écran) :
 // entre le goal et le tireur, sans chevaucher ni l'un ni l'autre
 const MIDDLE_Y = 0.55
@@ -44,25 +47,40 @@ const formatTime = (seconds) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
 const pick = (array) => array[Math.floor(Math.random() * array.length)]
+const rand = (min, max) => min + Math.random() * (max - min)
+const between = ([min, max]) => rand(min, max)
 
 // Calcule le résultat d'un tir (l'attaquant a répondu Correct) vers la zone choisie.
 // Les probabilités viennent de CHANCES. Le choix de la zone ne change que la direction.
+// Les points d'arrivée (ballon et gardien) sont des fractions du goal tirées au hasard :
+// fx = position en largeur (0 poteau gauche, 1 poteau droit), fy = en hauteur (0 barre, 1 sol).
 function resolveShot(levelId, keeperOk, power, zone) {
   const [onTarget, saveChance] = CHANCES[levelId]
   const save = keeperOk ? saveChance : 0
   const goalChance = Math.min(1, onTarget - save + (power ? 0.2 : 0))
   const r = Math.random()
 
-  // But : le gardien plonge dans une autre zone
+  // But : le ballon entre dans la zone choisie, le gardien plonge dans une autre zone
   if (r < goalChance) {
-    return { result: 'goal', ball: zone, keeper: pick(ZONES.filter((z) => z !== zone)) }
+    const other = pick(ZONES.filter((z) => z !== zone))
+    return {
+      result: 'goal',
+      ball: { fx: between(ZONE_RANGE[zone]), fy: rand(0.2, 0.8) },
+      keeper: { fx: between(ZONE_RANGE[other]), fy: rand(0.3, 0.8) },
+    }
   }
-  // Arrêt : le gardien plonge dans la même zone
+  // Arrêt : le gardien plonge à peu près là où va le ballon
   if (r < goalChance + save) {
-    return { result: 'save', ball: zone, keeper: zone }
+    const ball = { fx: between(ZONE_RANGE[zone]), fy: rand(0.2, 0.8) }
+    return { result: 'save', ball, keeper: { fx: ball.fx + rand(-0.04, 0.04), fy: ball.fy } }
   }
-  // Raté : le ballon sort du côté choisi, le gardien plonge au hasard
-  return { result: 'miss', ball: MISS_BALL[zone], keeper: pick(ZONES) }
+  // Raté : le ballon sort du côté choisi, à un endroit au hasard ; le gardien plonge au hasard
+  const out = MISS_AREA[zone]
+  return {
+    result: 'miss',
+    ball: { fx: between(out.x), fy: between(out.y) },
+    keeper: { fx: rand(0.1, 0.9), fy: rand(0.3, 0.8) },
+  }
 }
 
 // Ballon + étoiles + nom du niveau (88 px de ballon, 52 px sur écran bas)
@@ -167,6 +185,8 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
   const keeperRef = useRef(null) // la case du gardien (position)
   const keeperBodyRef = useRef(null) // son pictogramme (inclinaison pendant le plongeon)
   const patrol = useRef(true)
+  const shooterRef = useRef(null) // le tireur (il court vers le ballon)
+  const runFrame = useRef(0) // image d'animation de l'élan en cours, pour l'annuler si besoin
 
   const [bonus, setBonus] = useState({ double: false, power: false })
 
@@ -187,7 +207,10 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
   }
   useEffect(() => {
     const list = timers.current
-    return () => list.forEach(clearTimeout)
+    return () => {
+      list.forEach(clearTimeout)
+      cancelAnimationFrame(runFrame.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -203,15 +226,53 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
     return () => cancelAnimationFrame(frame)
   }, [range])
 
-  // Déplace le gardien vers une zone ('left' | 'center' | 'right') en l'inclinant un peu côté plongeon
-  const moveKeeper = (zone, ms) => {
+  // Déplace le gardien vers un point du goal { fx, fy } (fractions de sa largeur et de sa hauteur).
+  // Quand il plonge, il s'incline selon la distance parcourue (avec un peu de hasard) et saute
+  // plus ou moins haut selon la hauteur du point visé. dive = false : retour au centre, bien droit.
+  const moveKeeper = (target, ms, dive = true) => {
     const el = keeperRef.current
     const body = keeperBodyRef.current
     if (!el || !body) return
-    el.style.transition = `left ${ms}ms ease-out`
-    el.style.left = `${KEEPER_ZONE[zone] * range}px`
+    const left = clamp(target.fx * g.w - keeperW / 2, 0, range)
+    const tilt = dive ? clamp((target.fx - 0.5) * 2 * MAX_TILT + rand(-6, 6), -MAX_TILT, MAX_TILT) : 0
+    const lift = dive ? clamp((0.6 - target.fy) * g.h, 0, keeperH * 0.45) : 0
+    el.style.transition = `left ${ms}ms ease-out, bottom ${ms}ms ease-out`
+    el.style.left = `${left}px`
+    el.style.bottom = `${lift}px`
     body.style.transition = `transform ${ms}ms ease-out`
-    body.style.transform = `rotate(${KEEPER_TILT[zone]}deg)`
+    body.style.transform = `rotate(${tilt}deg)`
+  }
+
+  // Élan du tireur : il court vers le ballon en accélérant ; quand ses pieds arrivent au ballon,
+  // onKick() est appelé (le ballon part), puis il freine progressivement sans s'arrêter net.
+  const runUp = (onKick) => {
+    const el = shooterRef.current
+    if (!el) return
+    const feetY = el.getBoundingClientRect().bottom - shooterH * 0.06 // le bas des chaussures
+    const dist = Math.max(0, feetY - viewport.height * MIDDLE_Y) // distance jusqu'au ballon
+    const speed = (2 * dist) / RUN_MS // vitesse (px par ms) atteinte à l'arrivée sur le ballon
+    let start = null // l'heure de la première image
+    let kicked = false
+
+    const step = (now) => {
+      if (start === null) start = now
+      const t = now - start
+      let y
+      if (t < RUN_MS) {
+        y = dist * (t / RUN_MS) ** 2 // accélération constante
+      } else {
+        if (!kicked) {
+          kicked = true
+          onKick()
+        }
+        const u = Math.min(t - RUN_MS, STOP_MS)
+        y = dist + speed * u - (speed / (2 * STOP_MS)) * u * u // décélération constante jusqu'à l'arrêt
+      }
+      // Il s'éloigne vers le haut : un peu plus petit pour la profondeur
+      el.style.transform = `translateY(${-y}px) scale(${1 - 0.0006 * y})`
+      if (t < RUN_MS + STOP_MS) runFrame.current = requestAnimationFrame(step)
+    }
+    runFrame.current = requestAnimationFrame(step)
   }
 
   // Tirage au sort de la difficulté
@@ -226,42 +287,31 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
     return () => clearTimeout(timer)
   }, [phase])
 
-  // Où va le ballon (coordonnées écran)
-  const ballTarget = (zone) => {
-    const y = g.y + goalH * 0.55
-    const targets = {
-      left: { x: g.x + g.w * 0.18, y },
-      center: { x: g.x + g.w * 0.5, y },
-      right: { x: g.x + g.w * 0.82, y },
-      wideLeft: { x: g.x - 24, y },
-      over: { x: g.x + g.w * 0.5, y: g.y - 24 },
-      wideRight: { x: g.x + g.w + 24, y },
-    }
-    return targets[zone]
-  }
+  // Point d'arrivée du ballon en coordonnées écran, depuis une position { fx, fy } dans le goal
+  const toScreen = ({ fx, fy }) => ({ x: g.x + g.w * fx, y: g.y + g.h * fy })
 
   const playShot = (res) => {
     setPhase('shot')
 
-    // 1. Le gardien arrête son va-et-vient et revient au milieu
+    // 1. Le gardien arrête son va-et-vient et revient au milieu ; le ballon est posé, le tireur prend son élan
     patrol.current = false
-    moveKeeper('center', 400)
+    moveKeeper({ fx: 0.5, fy: 1 }, 400, false)
     const from = { x: viewport.width / 2, y: viewport.height * MIDDLE_Y }
     setBall({ ...from, scale: 1 })
 
-    // 2. Le ballon part (avec sa trajectoire en points), le gardien plonge
-    later(() => {
-      const to = ballTarget(res.ball)
+    // 2. Quand le tireur arrive sur le ballon, il part (avec sa trajectoire en points) et le gardien plonge
+    runUp(() => {
+      const to = toScreen(res.ball)
       setBall({ ...to, scale: 0.7 })
       setFlight({ from, to })
       moveKeeper(res.keeper, 300)
-    }, 500)
 
-    // 3. Résultat
-    later(() => {
-      if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
-      setPhase('outcome')
-    }, 1300)
+      // 3. Résultat, une fois le ballon arrivé (compté depuis la frappe, pas depuis le début de l'élan)
+      later(() => {
+        if (res.result === 'goal') addGoal(attacking, bonus.double ? 2 : 1)
+        setPhase('outcome')
+      }, BALL_FLIGHT_MS + 100)
+    })
   }
 
   const shoot = () => {
@@ -294,11 +344,16 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
 
   const next = () => {
     // Le gardien reprend son va-et-vient, sans animation de retour et sans inclinaison
-    if (keeperRef.current) keeperRef.current.style.transition = 'none'
+    if (keeperRef.current) {
+      keeperRef.current.style.transition = 'none'
+      keeperRef.current.style.bottom = ''
+    }
     if (keeperBodyRef.current) {
       keeperBodyRef.current.style.transition = 'none'
       keeperBodyRef.current.style.transform = ''
     }
+    // Le tireur revient à sa place de départ
+    if (shooterRef.current) shooterRef.current.style.transform = ''
     patrol.current = true
     setBonus({ double: false, power: false })
     setPhase('ready')
@@ -385,6 +440,16 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
         )}
       </div>
 
+      {/* Tireur : ancré en bas, ses jambes passent derrière les panneaux. Il court vers le ballon
+          au moment du tir (runUp) ; le ballon est dessiné par-dessus lui. */}
+      <div
+        ref={shooterRef}
+        className="pointer-events-none absolute left-1/2 origin-bottom -translate-x-1/2"
+        style={{ bottom: 'calc(var(--pb) + 64px)', width: shooterW, aspectRatio: PLAYER_RATIO }}
+      >
+        <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
+      </div>
+
       {/* Milieu de l'écran */}
       <div
         className="absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
@@ -456,7 +521,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
       {flight && <Trajectory from={flight.from} to={flight.to} />}
 
       {/* Ballon en vol */}
-      {ball && (
+      {ball && shooterLevel && (
         <div
           className="absolute size-[52px] -translate-x-1/2 -translate-y-1/2 transition-[left,top,transform] duration-[600ms] ease-out"
           style={{ left: ball.x, top: ball.y, transform: `scale(${ball.scale})` }}
@@ -467,14 +532,6 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
           />
         </div>
       )}
-
-      {/* Tireur : ancré en bas, ses jambes passent derrière les panneaux */}
-      <div
-        className="pointer-events-none absolute left-1/2 -translate-x-1/2"
-        style={{ bottom: 'calc(var(--pb) + 64px)', width: shooterW, aspectRatio: PLAYER_RATIO }}
-      >
-        <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
-      </div>
 
       {/* Zone d'action */}
       <div

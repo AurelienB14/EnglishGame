@@ -30,14 +30,20 @@ export const CHANCES = {
 // Les trois zones du but
 export const ZONES = ['left', 'center', 'right']
 
-// Position du gardien dans les cages : 0 = poteau gauche, 1 = poteau droit
-export const KEEPER_ZONE = { left: 0, center: 0.5, right: 1 }
+// Positions dans le goal, en fractions de sa largeur (0 = poteau gauche, 1 = poteau droit)
+// et de sa hauteur (0 = barre, 1 = sol). Le tir tombe à un point au hasard dans ces plages.
+export const ZONE_RANGE = { left: [0.1, 0.3], center: [0.4, 0.6], right: [0.7, 0.9] }
 
-// Inclinaison du gardien (en degrés) quand il plonge : un peu vers le côté du plongeon
-export const KEEPER_TILT = { left: -25, center: 0, right: 25 }
+// Où sort le ballon quand le tir est raté, selon le côté choisi (mêmes fractions du goal) :
+// à gauche ou à droite à côté du poteau, au centre au-dessus de la barre (jamais tout droit)
+export const MISS_AREA = {
+  left: { x: [-0.4, -0.05], y: [0.1, 0.9] },
+  center: { x: [0.25, 0.75], y: [-0.8, -0.25] },
+  right: { x: [1.05, 1.4], y: [0.1, 0.9] },
+}
 
-// Où part le ballon quand le tir est raté, selon le côté choisi
-export const MISS_BALL = { left: 'wideLeft', center: 'over', right: 'wideRight' }
+// Inclinaison maximale du gardien (en degrés) quand il plonge
+export const MAX_TILT = 40
 
 // Proportions du pictogramme joueur (viewBox 120 x 170)
 export const PLAYER_RATIO = 120 / 170

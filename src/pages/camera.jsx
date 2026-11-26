@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 const MIN_ZOOM = 0.5 // le plus dézoomé proposé (si le téléphone le permet)
 const MAX_ZOOM = 2 // le plus zoomé proposé
 
-// zoom : valeur voulue (null = minimum) · onZoomRange : appelé avec { min, max, step } si le zoom est géré
-// (passer une fonction stable, ex. le setter d'un useState)
-function Camera({ zoom = null, onZoomRange }) {
+// zoom : valeur voulue (null = minimum)
+// lensId : objectif choisi (null = l'objectif arrière par défaut)
+// onZoomRange : appelé avec { min, max, step } si le zoom est géré, sinon avec null
+// onLenses : appelé avec { list: [{ id, label }], active } : les objectifs arrière disponibles
+// (passer des fonctions stables, ex. des setters de useState)
+function Camera({ zoom = null, lensId = null, onZoomRange, onLenses }) {
   const videoRef = useRef(null)
   const trackRef = useRef(null) // la piste vidéo, pour changer le zoom sans relancer la caméra
   // Si la caméra n'existe pas (HTTP, ancien navigateur), on affiche le fond de secours directement
@@ -20,15 +23,15 @@ function Camera({ zoom = null, onZoomRange }) {
 
     navigator.mediaDevices
       .getUserMedia({
-        // Caméra arrière, limitée à 720p (éco-conception)
+        // Caméra arrière (ou l'objectif choisi), limitée à 720p (éco-conception)
         video: {
-          facingMode: 'environment',
+          ...(lensId ? { deviceId: { exact: lensId } } : { facingMode: 'environment' }),
           width: { ideal: 1280, max: 1280 },
           height: { ideal: 720, max: 720 },
         },
         audio: false,
       })
-      .then((s) => {
+      .then(async (s) => {
         // En dev, StrictMode lance l'effet deux fois : la première réponse arrive après
         // le nettoyage. On coupe alors ce flux tout de suite, sinon la caméra reste ouverte.
         if (cancelled) {
@@ -49,7 +52,19 @@ function Camera({ zoom = null, onZoomRange }) {
           const min = Math.max(range.min, MIN_ZOOM)
           const max = Math.min(range.max, MAX_ZOOM)
           track.applyConstraints({ advanced: [{ zoom: min }] }).catch(() => {})
-          if (max > min) onZoomRange({ min, max, step: Math.max(range.step || 0, 0.1) })
+          onZoomRange(max > min ? { min, max, step: Math.max(range.step || 0, 0.1) } : null)
+        } else {
+          onZoomRange(null)
+        }
+
+        // Les objectifs arrière (les noms ne sont connus qu'après l'autorisation de la caméra).
+        // Sur iPhone on y trouve "Back Ultra Wide Camera" : c'est lui qui permet de dézoomer.
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        if (!cancelled) {
+          const list = devices
+            .filter((d) => d.kind === 'videoinput' && /back|rear|environment/i.test(d.label))
+            .map((d) => ({ id: d.deviceId, label: d.label }))
+          onLenses({ list, active: track?.getSettings?.().deviceId ?? null })
         }
 
         return video.play()
@@ -66,7 +81,7 @@ function Camera({ zoom = null, onZoomRange }) {
       stream?.getTracks().forEach((t) => t.stop())
       video.srcObject = null
     }
-  }, [onZoomRange])
+  }, [lensId, onZoomRange, onLenses])
 
   // Quand le joueur règle le curseur de zoom
   useEffect(() => {

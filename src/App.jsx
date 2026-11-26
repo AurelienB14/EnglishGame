@@ -39,6 +39,15 @@ function App() {
   // Zoom de la caméra : zoomRange = { min, max, step } si le téléphone le permet, zoom = valeur choisie (null = minimum)
   const [zoomRange, setZoomRange] = useState(null)
   const [zoom, setZoom] = useState(null)
+  // Objectifs arrière : lenses = { list: [{ id, label }], active }, lensId = objectif choisi (null = défaut)
+  const [lenses, setLenses] = useState({ list: [], active: null })
+  const [lensId, setLensId] = useState(null)
+
+  // Changer d'objectif remet le zoom au minimum
+  const chooseLens = (id) => {
+    setLensId(id)
+    setZoom(null)
+  }
 
   // Quitter le plein écran fait revenir le menu (avec CONTINUE)
   useEffect(() => {
@@ -123,6 +132,8 @@ function App() {
         zoomRange={zoomRange}
         zoom={zoom ?? zoomRange?.min}
         onZoom={setZoom}
+        lenses={lenses}
+        onLens={chooseLens}
       />
     )
   } else if (step === 'choosingplayers') {
@@ -155,7 +166,7 @@ function App() {
 
   return (
     <>
-      <Camera zoom={zoom} onZoomRange={setZoomRange} />
+      <Camera zoom={zoom} lensId={lensId} onZoomRange={setZoomRange} onLenses={setLenses} />
       {page}
       {/* Le menu passe par-dessus : la page reste montée, la partie en cours n'est pas perdue */}
       {menuOpen && (

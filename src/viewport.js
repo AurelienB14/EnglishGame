@@ -27,4 +27,15 @@ export function goalToPx(goal, viewport) {
   }
 }
 
+// Hauteur réelle, en px, de la marge de sécurité du bas (--pb dans index.css : encoche + 16 px).
+// Sert à connaître la position exacte du tireur, qui est posé en CSS à partir de cette marge.
+export function readBottomInset() {
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:var(--pb);visibility:hidden'
+  document.body.appendChild(probe)
+  const px = probe.getBoundingClientRect().height
+  probe.remove()
+  return px
+}
+
 export const clamp = (value, min, max) => Math.min(Math.max(value, min), max)

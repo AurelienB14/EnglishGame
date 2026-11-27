@@ -18,7 +18,7 @@ import {
   ZONE_RANGE,
   ZONES,
 } from '../constants'
-import { clamp, goalToPx, useViewport } from '../viewport'
+import { clamp, goalToPx, readBottomInset, useViewport } from '../viewport'
 import { playSound, RESULT_SOUNDS, stopSounds } from '../sounds'
 
 const SPEED = Math.PI / 1.6 // vitesse du gardien
@@ -29,9 +29,11 @@ const ROLL_TIME = 1500 // durée du tirage, en ms
 const RUN_MS = 650 // élan du tireur vers le ballon (il accélère), en ms
 const STOP_MS = 130 // freinage du tireur après la frappe (il ralentit sans s'arrêter net), en ms
 const BALL_FLIGHT_MS = 600 // durée du vol du ballon (doit correspondre à duration-[600ms] plus bas)
-// Hauteur du ballon, du tirage, du badge de niveau et du résultat (fraction de l'écran) :
+// Hauteur du tirage, du badge de niveau et du résultat (fraction de l'écran) :
 // entre le goal et le tireur, sans chevaucher ni l'un ni l'autre
 const MIDDLE_Y = 0.55
+const SHOOTER_BOTTOM = 64 // le tireur est posé à 64 px au-dessus de la marge du bas (ses jambes passent derrière les panneaux)
+const BALL_CLEARANCE = 36 // le ballon reste toujours au moins 36 px au-dessus de la tête du tireur
 
 const ZONE_LABEL = { left: 'Left', center: 'Center', right: 'Right' }
 
@@ -182,6 +184,14 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
   const keeperW = keeperH * PLAYER_RATIO
   const range = g.w - keeperW
 
+  // Position du ballon : au tiers du chemin entre le tireur et le gardien en partant du tireur
+  // (donc à 1/3 du tireur et 2/3 du gardien), pour qu'il soit proche de l'attaquant.
+  // Si le goal est très bas, il reste au moins BALL_CLEARANCE px au-dessus de la tête du tireur.
+  const [bottomInset] = useState(readBottomInset) // marge de sécurité du bas, en px (mesurée une fois)
+  const shooterTop = viewport.height - bottomInset - SHOOTER_BOTTOM - shooterH
+  const keeperFeet = g.y + g.h
+  const ballY = Math.min(shooterTop + (keeperFeet - shooterTop) / 3, shooterTop - BALL_CLEARANCE)
+
   // Gardien : va-et-vient tant que patrol vaut true
   const keeperRef = useRef(null) // la case du gardien (position)
   const keeperBodyRef = useRef(null) // son pictogramme (inclinaison pendant le plongeon)
@@ -250,7 +260,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
     const el = shooterRef.current
     if (!el) return
     const feetY = el.getBoundingClientRect().bottom - shooterH * 0.06 // le bas des chaussures
-    const dist = Math.max(0, feetY - viewport.height * MIDDLE_Y) // distance jusqu'au ballon
+    const dist = Math.max(0, feetY - ballY) // distance jusqu'au ballon
     const speed = (2 * dist) / RUN_MS // vitesse (px par ms) atteinte à l'arrivée sur le ballon
     let start = null // l'heure de la première image
     let kicked = false
@@ -301,7 +311,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
     // 1. Le gardien arrête son va-et-vient et revient au milieu ; le ballon est posé, le tireur prend son élan
     patrol.current = false
     moveKeeper({ fx: 0.5, fy: 1 }, 400, false)
-    const from = { x: viewport.width / 2, y: viewport.height * MIDDLE_Y }
+    const from = { x: viewport.width / 2, y: ballY }
     setBall({ ...from, scale: 1 })
 
     // 2. Quand le tireur arrive sur le ballon, il part (avec sa trajectoire en points) et le gardien plonge
@@ -459,38 +469,42 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
       <div
         ref={shooterRef}
         className="pointer-events-none absolute left-1/2 origin-bottom -translate-x-1/2"
-        style={{ bottom: 'calc(var(--pb) + 64px)', width: shooterW, aspectRatio: PLAYER_RATIO }}
+        style={{ bottom: `calc(var(--pb) + ${SHOOTER_BOTTOM}px)`, width: shooterW, aspectRatio: PLAYER_RATIO }}
       >
         <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
       </div>
 
-      {/* Milieu de l'écran */}
+      {/* Ballon posé : à 1/3 du tireur et 2/3 du gardien (ballY) */}
+      {restingBall && (
+        <div
+          className="absolute left-1/2 size-[52px] -translate-x-1/2 -translate-y-1/2"
+          style={{ top: ballY }}
+        >
+          <div className={bouncing ? 'size-full motion-safe:animate-ball' : 'size-full'}>
+            {bouncing ? (
+              // Ballon blanc, rond central noir pour faire ressortir le logo blanc
+              <Ball color="var(--color-white)" core="var(--color-extreme)" />
+            ) : (
+              <Ball
+                color={shooterLevel.color}
+                seam={shooterLevel.id === 'extreme' ? 'var(--color-white)' : undefined}
+              />
+            )}
+          </div>
+          {/* Ombre plate (pas de flou) qui s'écrase pendant le rebond */}
+          <div
+            className={`absolute left-1/2 top-full h-2 w-11 -translate-x-1/2 rounded-full bg-navy/45 ${
+              bouncing ? 'motion-safe:animate-squash' : ''
+            }`}
+          />
+        </div>
+      )}
+
+      {/* Milieu de l'écran : tirage, badge de niveau, résultat */}
       <div
         className="absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
         style={{ top: `${MIDDLE_Y * 100}%` }}
       >
-        {restingBall && (
-          <div className="relative size-[52px]">
-            <div className={bouncing ? 'size-full motion-safe:animate-ball' : 'size-full'}>
-              {bouncing ? (
-                // Ballon blanc, rond central noir pour faire ressortir le logo blanc
-                <Ball color="var(--color-white)" core="var(--color-extreme)" />
-              ) : (
-                <Ball
-                  color={shooterLevel.color}
-                  seam={shooterLevel.id === 'extreme' ? 'var(--color-white)' : undefined}
-                />
-              )}
-            </div>
-            {/* Ombre plate (pas de flou) qui s'écrase pendant le rebond */}
-            <div
-              className={`absolute left-1/2 top-full h-2 w-11 -translate-x-1/2 rounded-full bg-navy/45 ${
-                bouncing ? 'motion-safe:animate-squash' : ''
-              }`}
-            />
-          </div>
-        )}
-
         {phase === 'rolling' && (
           <div className="relative size-[150px] animate-draw">
             {LEVELS.slice(0, 3).map((l, i) => {

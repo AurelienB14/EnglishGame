@@ -15,9 +15,11 @@ import {
   MAX_TILT,
   MISS_AREA,
   PLAYER_RATIO,
+  TEAM_COLOR,
   ZONE_RANGE,
   ZONES,
 } from '../constants'
+import { AnswerBubble, CardIcon } from '../component/card_marks'
 import { clamp, goalToPx, readBottomInset, useViewport } from '../viewport'
 import { playSound, RESULT_SOUNDS, stopSounds } from '../sounds'
 
@@ -32,6 +34,7 @@ const BALL_FLIGHT_MS = 600 // durée du vol du ballon (doit correspondre à dura
 // Hauteur du tirage, du badge de niveau et du résultat (fraction de l'écran) :
 // entre le goal et le tireur, sans chevaucher ni l'un ni l'autre
 const MIDDLE_Y = 0.55
+const MIDDLE_Y_SMALL = 0.5 // sur écran bas (≤ 700 px), un peu plus haut : le repère "?" / carte au-dessus du tireur occupe de la place
 const SHOOTER_BOTTOM = 64 // le tireur est posé à 64 px au-dessus de la marge du bas (ses jambes passent derrière les panneaux)
 const BALL_CLEARANCE = 36 // le ballon reste toujours au moins 36 px au-dessus de la tête du tireur
 
@@ -106,21 +109,82 @@ function LevelBadge({ level }) {
   )
 }
 
-// Panneau de carte : couleur du niveau, Correct (doré) / Incorrect (navy)
-function CardPanel({ role, player, level, onAnswer }) {
+// Puce d'un joueur : rond (numéro, couleur d'équipe), nom et rôle ("Reads" ou "Answers").
+// highlight : la puce de celui qui répond est dorée pour ressortir.
+function PlayerChip({ player, role, highlight }) {
   return (
-    <section className={`cardp lv-${level.id} w-full`} aria-label={`${role} card`}>
-      <div className="flex h-8 items-center gap-2.5">
-        <span className="tag max-w-[45%] truncate">
-          {role} · {player.name}
+    <div
+      className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-full border-2 border-navy p-0.5 pr-2.5 ${
+        highlight ? 'bg-gold text-navy' : 'bg-navy text-white'
+      }`}
+    >
+      <span
+        className={`grid size-7 flex-none place-items-center rounded-full border-2 border-navy pt-0.5 font-display text-base leading-none ${
+          player.team === 'green' ? 'text-navy' : 'text-white' // le blanc sur le vert est trop peu contrasté
+        }`}
+        style={{ backgroundColor: TEAM_COLOR[player.team] }}
+      >
+        {player.number}
+      </span>
+      <span className="min-w-0 leading-none">
+        <span className="block truncate font-cond text-[15px] font-bold uppercase tracking-label">{player.name}</span>
+        <span className="mt-0.5 block font-cond text-[11px] font-semibold uppercase tracking-label opacity-80">
+          {role}
         </span>
-        <h2 className="font-cond text-[22px] font-bold uppercase leading-none tracking-label">Draw a card</h2>
+      </span>
+    </div>
+  )
+}
+
+// "a" ou "an" devant le nom du niveau : an Easy card, an Extreme card, a Medium card, a Hard card
+const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a')
+
+// Panneau de carte : c'est toujours l'adversaire qui tire la carte papier et la lit à voix haute.
+//   reader   = celui qui tire la carte et lit la question
+//   answerer = celui qui répond (Correct / Incorrect jugent SA réponse)
+function CardPanel({ reader, answerer, level, onAnswer }) {
+  return (
+    <section className={`cardp lv-${level.id} flex w-full flex-col gap-1.5 !p-3`} aria-label="Card question">
+      {/* 1. Qui lit -> qui répond */}
+      <div className="flex items-center gap-1.5">
+        <PlayerChip player={reader} role="Reads" />
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" className="flex-none">
+          <path
+            d="M2 8h10M8 3l5 5-5 5"
+            fill="none"
+            className="stroke-current"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <PlayerChip player={answerer} role="Answers" highlight />
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
-        <Button wide onClick={() => onAnswer(true)}>
+
+      {/* 2. La carte à tirer : nom du niveau et étoiles */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-[28px] uppercase leading-none tracking-display">{level.label} card</h2>
+        <div className="flex gap-0.5" aria-label={`${level.stars} stars`}>
+          {Array.from({ length: level.stars }, (_, i) => (
+            <Star key={i} className="size-5 fill-white stroke-navy" />
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Consigne */}
+      <p className="truncate font-body text-sm leading-tight">
+        {reader.name}, draw {article(level.label)} {level.label} card. Read it to {answerer.name}.
+      </p>
+
+      {/* 4. Question de jugement, puis 5. boutons */}
+      <p className="truncate font-cond text-base font-bold uppercase leading-none tracking-label">
+        {answerer.name}&apos;s answer?
+      </p>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Button wide className="h-11" onClick={() => onAnswer(true)}>
           Correct
         </Button>
-        <Button wide variant="navy" onClick={() => onAnswer(false)}>
+        <Button wide variant="navy" className="h-11" onClick={() => onAnswer(false)}>
           Incorrect
         </Button>
       </div>
@@ -407,8 +471,14 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
   const restingBall = phase === 'ready' || phase === 'aim'
   const bouncing = phase === 'ready'
 
+  // Phases de carte : l'adversaire tire la carte papier et la lit, l'autre joueur répond
+  //   shooterCard : le gardien lit, le tireur répond · keeperCard : le tireur lit, le gardien répond
+  const shooterAnswers = phase === 'shooterCard'
+  const asking = shooterAnswers || phase === 'keeperCard'
+
   return (
-    <div className="relative h-dvh overflow-hidden">
+    // has-card : la zone d'action est plus haute pendant les phases de carte (voir index.css)
+    <div className={`relative h-dvh overflow-hidden ${asking ? 'has-card' : ''}`}>
       {/* Haut : tableau des scores + chrono */}
       <div className="absolute inset-x-0 flex flex-col items-center gap-2" style={{ top: 'var(--pt)' }}>
         <Scoreboard blue={score.blue} green={score.green} />
@@ -425,6 +495,8 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
             <Player name={keeper.name} number={keeper.number} team={keeper.team} pose="keeper" />
           </div>
           <span className="name-pill absolute left-1/2 top-full mt-0.5 -translate-x-1/2">{keeper.name}</span>
+          {/* Repère pendant les cartes : "?" s'il répond, carte s'il lit */}
+          {asking && (shooterAnswers ? <CardIcon /> : <AnswerBubble />)}
         </div>
 
         {/* Trois zones cliquables par-dessus le goal (phase aim) : trait navy sous un trait doré */}
@@ -472,6 +544,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
         style={{ bottom: `calc(var(--pb) + ${SHOOTER_BOTTOM}px)`, width: shooterW, aspectRatio: PLAYER_RATIO }}
       >
         <Player name={shooter.name} number={shooter.number} team={shooter.team} pose="shooter" />
+        {asking && (shooterAnswers ? <AnswerBubble /> : <CardIcon />)}
       </div>
 
       {/* Ballon posé : à 1/3 du tireur et 2/3 du gardien (ballY) */}
@@ -503,7 +576,7 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
       {/* Milieu de l'écran : tirage, badge de niveau, résultat */}
       <div
         className="absolute left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
-        style={{ top: `${MIDDLE_Y * 100}%` }}
+        style={{ top: `${(viewport.height > 700 ? MIDDLE_Y : MIDDLE_Y_SMALL) * 100}%` }}
       >
         {phase === 'rolling' && (
           <div className="relative size-[150px] animate-draw">
@@ -573,11 +646,11 @@ function Game({ allPlayers, turn, goal, score, addGoal, removeGoal, nextTurn, pa
         )}
 
         {phase === 'shooterCard' && (
-          <CardPanel role="Shooter" player={shooter} level={shooterLevel} onAnswer={shooterAnswer} />
+          <CardPanel reader={keeper} answerer={shooter} level={shooterLevel} onAnswer={shooterAnswer} />
         )}
 
         {phase === 'keeperCard' && (
-          <CardPanel role="Keeper" player={keeper} level={keeperLevel} onAnswer={keeperAnswer} />
+          <CardPanel reader={shooter} answerer={keeper} level={keeperLevel} onAnswer={keeperAnswer} />
         )}
 
         {phase === 'aim' && <AimPanel onPick={chooseSpot} />}

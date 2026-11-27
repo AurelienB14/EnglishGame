@@ -21,6 +21,12 @@ body {
 @media (max-height: 700px) {
   :root { --action-h: 126px; }
 }
+/* Pendant les phases de carte le panneau est plus haut : la zone d'action (et le bouton bonus
+   posé au-dessus) suivent. Le tireur, lui, est posé en bas à distance fixe : il ne bouge pas. */
+.has-card { --action-h: 196px; }
+@media (max-height: 700px) {
+  .has-card { --action-h: 192px; }
+}
 
 /* "static" : toutes les variables sont toujours générées, même celles
    utilisées seulement en JS (ex. var(--color-easy) dans constants.js) */
